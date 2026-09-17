@@ -293,20 +293,10 @@ body,
   position: absolute;
   left: 50%;
   top: 50%;
-  transform: translate(-50%, -50%);
-  font-family: "IBM Plex Sans", monospace;
-  font-weight: 700;
-  font-size: 28px;
-  line-height: 1;
-  color: rgba(180, 255, 160, 0.95);
-  text-shadow:
-    0 0 1px #000,
-    0 0 6px rgba(0, 0, 0, 0.9),
-    1px 0 0 #000,
-    -1px 0 0 #000,
-    0 1px 0 #000,
-    0 -1px 0 #000;
+  width: 0;
+  height: 0;
   z-index: 13;
+  pointer-events: none;
   user-select: none;
 }
 
@@ -316,21 +306,20 @@ body,
   position: absolute;
   left: 50%;
   top: 50%;
-  background: rgba(180, 255, 160, 0.85);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+  background: rgba(180, 255, 160, 0.9);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.65);
 }
 
-/* Fine hairlines through the + */
 #scopeReticle::before {
   width: 72px;
-  height: 1px;
-  margin: -0.5px 0 0 -36px;
+  height: 2px;
+  margin: -1px 0 0 -36px;
 }
 
 #scopeReticle::after {
-  width: 1px;
+  width: 2px;
   height: 72px;
-  margin: -36px 0 0 -0.5px;
+  margin: -36px 0 0 -1px;
 }
 
 #killfeed {

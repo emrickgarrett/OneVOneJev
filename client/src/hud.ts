@@ -65,8 +65,7 @@ export class Hud {
     if (scoped) {
       this.scope.classList.add("active");
       this.scope.classList.remove("hidden");
-      // Hip circle fades out; scoped + reticle is inside the overlay
-      this.crosshair.style.opacity = String(Math.max(0, 1 - adsProgress * 1.4));
+      this.crosshair.style.opacity = "0";
     } else {
       this.scope.classList.remove("active");
       this.crosshair.style.opacity = snap.you.role === "playing" ? "1" : "0";

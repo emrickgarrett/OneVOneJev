@@ -1,25 +1,22 @@
 import type { PlayerInput } from "@onevonejev/shared";
 
 export class Input {
-  forward = 0;
-  strafe = 0;
-  jump = false;
   ads = false;
   fire = false;
-  yawDelta = 0;
-  pitchDelta = 0;
+  /** Deltas queued for the next network sample (already applied locally via onLook). */
+  private netYawDelta = 0;
+  private netPitchDelta = 0;
   private keys = new Set<string>();
   private seq = 0;
   enabled = false;
-  sensitivity = 0.0055;
+  sensitivity = 0.0028;
+  /** Called immediately on mouse move so the camera never waits on the server. */
+  onLook: ((yawDelta: number, pitchDelta: number) => void) | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     window.addEventListener("keydown", (e) => {
       this.keys.add(e.code);
       if (e.code === "Space") e.preventDefault();
-      if (e.code === "KeyT" && this.enabled) {
-        // allow chat focus — handled externally
-      }
     });
     window.addEventListener("keyup", (e) => this.keys.delete(e.code));
 
@@ -29,8 +26,11 @@ export class Input {
 
     document.addEventListener("mousemove", (e) => {
       if (document.pointerLockElement !== canvas || !this.enabled) return;
-      this.yawDelta += e.movementX * this.sensitivity;
-      this.pitchDelta -= e.movementY * this.sensitivity;
+      const yawDelta = e.movementX * this.sensitivity;
+      const pitchDelta = -e.movementY * this.sensitivity;
+      this.netYawDelta += yawDelta;
+      this.netPitchDelta += pitchDelta;
+      this.onLook?.(yawDelta, pitchDelta);
     });
 
     document.addEventListener("mousedown", (e) => {
@@ -55,14 +55,14 @@ export class Input {
       seq: ++this.seq,
       forward: f,
       strafe: s,
-      yawDelta: this.yawDelta,
-      pitchDelta: this.pitchDelta,
+      yawDelta: this.netYawDelta,
+      pitchDelta: this.netPitchDelta,
       jump: this.keys.has("Space"),
       ads: this.ads,
       fire: this.fire,
     };
-    this.yawDelta = 0;
-    this.pitchDelta = 0;
+    this.netYawDelta = 0;
+    this.netPitchDelta = 0;
     this.fire = false;
     return input;
   }

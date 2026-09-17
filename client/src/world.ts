@@ -1,8 +1,9 @@
 import * as THREE from "three";
 import { MAP_BOXES, MAP_BOUNDS } from "@onevonejev/shared";
-import { createOperator, createViewmodel } from "./models";
+import { createOperator, createViewmodel, preloadModels } from "./models";
 
 export function createWorld(canvas: HTMLCanvasElement) {
+  preloadModels();
   const renderer = new THREE.WebGLRenderer({
     canvas,
     antialias: true,

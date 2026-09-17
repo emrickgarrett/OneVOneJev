@@ -1,5 +1,6 @@
-import type { Aabb } from "@onevonejev/shared";
-import { MAP_BOXES, MAP_BOUNDS, PLAYER_HEIGHT, PLAYER_RADIUS } from "@onevonejev/shared";
+import type { Aabb } from "./map.js";
+import { MAP_BOXES } from "./map.js";
+import { MAP_BOUNDS, PLAYER_HEIGHT, PLAYER_RADIUS } from "./constants.js";
 
 export function resolveCapsule(
   x: number,
@@ -25,7 +26,6 @@ export function resolveCapsule(
       const overlapsY = head > b.minY && feet < b.maxY;
 
       if (!overlapsY) {
-        // Standing on top
         if (
           feet >= b.maxY - 0.35 &&
           feet <= b.maxY + 0.15 &&
@@ -46,7 +46,6 @@ export function resolveCapsule(
         px += (dx / dist) * push;
         pz += (dz / dist) * push;
       } else if (distSq === 0 && overlapsY) {
-        // Inside box horizontally — push out shortest axis
         const left = Math.abs(px - b.minX);
         const right = Math.abs(b.maxX - px);
         const back = Math.abs(pz - b.minZ);

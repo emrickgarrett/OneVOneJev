@@ -16,9 +16,11 @@ import {
   SPAWN_POINTS,
   SPAWN_PROTECTION_MS,
   TICK_HZ,
+  hasLineOfSight,
+  resolveCapsule,
+  raycastAabb,
   type PlayerInput,
 } from "@onevonejev/shared";
-import { hasLineOfSight, resolveCapsule, raycastAabb } from "./collision.js";
 
 const DT = 1 / TICK_HZ;
 

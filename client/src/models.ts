@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 const gunmetal = () =>
   new THREE.MeshStandardMaterial({ color: 0x2a2e32, metalness: 0.85, roughness: 0.35 });
@@ -17,8 +18,95 @@ const glass = () =>
     opacity: 0.55,
   });
 
-/** Bolt-action sniper — procedural kitbash (FPS view or world-scale). */
+/** Quaternius Ultimate Guns Pack sniper — CC0 (see public/models/CREDITS.txt). */
+const SNIPER_URL = "/models/sniper.glb";
+
+let sniperTemplate: THREE.Group | null = null;
+let sniperLoad: Promise<THREE.Group> | null = null;
+const sniperSlots: THREE.Group[] = [];
+
+function ensureSniperLoaded(): Promise<THREE.Group> {
+  if (sniperTemplate) return Promise.resolve(sniperTemplate);
+  if (sniperLoad) return sniperLoad;
+
+  sniperLoad = new Promise((resolve, reject) => {
+    const loader = new GLTFLoader();
+    loader.load(
+      SNIPER_URL,
+      (gltf) => {
+        const root = new THREE.Group();
+        root.add(gltf.scene);
+        // Quaternius units are large; normalize to ~1m barrel length.
+        const box = new THREE.Box3().setFromObject(root);
+        const size = new THREE.Vector3();
+        box.getSize(size);
+        const longest = Math.max(size.x, size.y, size.z) || 1;
+        root.scale.setScalar(1.05 / longest);
+        box.setFromObject(root);
+        const center = new THREE.Vector3();
+        box.getCenter(center);
+        root.position.sub(center);
+        // Sit grip near origin; barrel along +X like the procedural kit.
+        root.position.y += 0.04;
+
+        root.traverse((o) => {
+          if (o instanceof THREE.Mesh) {
+            o.castShadow = true;
+            o.receiveShadow = true;
+            const mats = Array.isArray(o.material) ? o.material : [o.material];
+            for (const m of mats) {
+              if (m && "metalness" in m) {
+                const std = m as THREE.MeshStandardMaterial;
+                std.metalness = Math.max(std.metalness ?? 0, 0.35);
+                std.roughness = Math.min(std.roughness ?? 1, 0.55);
+                std.needsUpdate = true;
+              }
+            }
+          }
+        });
+
+        sniperTemplate = root;
+        for (const slot of sniperSlots) fillSniperSlot(slot);
+        resolve(root);
+      },
+      undefined,
+      (err) => {
+        console.warn("[models] sniper.glb failed, using procedural fallback", err);
+        reject(err);
+      },
+    );
+  });
+
+  return sniperLoad;
+}
+
+function fillSniperSlot(slot: THREE.Group): void {
+  while (slot.children.length) slot.remove(slot.children[0]!);
+  if (sniperTemplate) {
+    slot.add(sniperTemplate.clone(true));
+  } else {
+    slot.add(createProceduralSniper());
+  }
+}
+
+/** Bolt-action sniper — GLB when ready, procedural until then. */
 export function createSniperRifle(): THREE.Group {
+  const slot = new THREE.Group();
+  sniperSlots.push(slot);
+  fillSniperSlot(slot);
+  void ensureSniperLoaded().catch(() => {
+    /* procedural already in slot */
+  });
+  return slot;
+}
+
+/** Kick off asset load early (call from world bootstrap). */
+export function preloadModels(): void {
+  void ensureSniperLoaded().catch(() => undefined);
+}
+
+/** Procedural kitbash fallback if the GLB is missing. */
+function createProceduralSniper(): THREE.Group {
   const gun = new THREE.Group();
   const steel = gunmetal();
   const poly = darkPoly();
@@ -203,7 +291,7 @@ export function createViewmodel(): {
 } {
   const root = new THREE.Group();
   const rifle = createSniperRifle();
-  rifle.scale.setScalar(1.15);
+  rifle.scale.setScalar(1.2);
   // Rest pose: lower-right of view
   rifle.position.set(0.28, -0.28, -0.55);
   rifle.rotation.set(0.08, Math.PI * 0.52, 0.12);

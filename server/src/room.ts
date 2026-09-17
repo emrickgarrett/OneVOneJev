@@ -3,6 +3,7 @@ import {
   KILLCAM_BUFFER_MS,
   KILLCAM_DURATION_MS,
   MATCH_KILLS_TO_WIN,
+  MATCH_TIME_LIMIT_MS,
   SNAPSHOT_HZ,
   TICK_HZ,
   type ChatMessage,
@@ -68,6 +69,8 @@ export class MatchRoom {
   private lastTime = Date.now();
   /** Bumped when leaving `playing` so late TypeSafe responses are ignored. */
   private jevEpoch = 0;
+  /** Wall-clock when the live duel started (`playing`); 0 if not in a timed match. */
+  private matchStartedAt = 0;
 
   constructor(apiKey: string | undefined) {
     this.jev = createFighter("jev", "Jev", "jev", 2);
@@ -190,6 +193,7 @@ export class MatchRoom {
       if (this.phaseTimer <= 0) {
         this.phase = "playing";
         this.countdown = 0;
+        this.matchStartedAt = now;
         this.resetRoundScores();
       }
     } else if (this.phase === "killcam") {
@@ -214,6 +218,26 @@ export class MatchRoom {
     }
 
     if (this.phase === "countdown") return;
+
+    if (
+      this.phase === "playing" &&
+      this.matchStartedAt > 0 &&
+      now - this.matchStartedAt >= MATCH_TIME_LIMIT_MS
+    ) {
+      const name = this.human?.name ?? "Challenger";
+      this.broadcast({
+        type: "chat",
+        msg: {
+          id: uid(),
+          from: "SYSTEM",
+          text: `${name} timed out (3:00) — kicked from the arena.`,
+          t: Date.now(),
+        },
+      });
+      this.endActiveMatch(false);
+      this.promoteNext();
+      return;
+    }
 
     // Apply human input
     if (this.human && this.activePlayerId) {
@@ -367,6 +391,7 @@ export class MatchRoom {
   private endActiveMatch(completed: boolean): void {
     this.jevEpoch++;
     this.jevCtrl.reset();
+    this.matchStartedAt = 0;
 
     const finishedId = this.activePlayerId;
     if (finishedId) {

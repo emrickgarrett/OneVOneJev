@@ -1,0 +1,5 @@
+# Quaternius SniperRifle (CC0)
+
+Source: Quaternius Ultimate Guns Pack (CC0 / public domain)
+Via: https://quaternius.com — also mirrored in community repos as SniperRifle_1
+License: Creative Commons Zero (CC0) — free for commercial use, no attribution required

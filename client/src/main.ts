@@ -6,6 +6,7 @@ import { Hud } from "./hud";
 import { drawRadar } from "./radar";
 import { KillcamPlayer, setCameraFromPose } from "./killcam";
 import { AudioBus } from "./audio";
+import { PredictedPlayer } from "./predict";
 
 const canvas = document.getElementById("game") as HTMLCanvasElement;
 const lobby = document.getElementById("lobby")!;
@@ -22,13 +23,18 @@ const input = new Input(canvas);
 const hud = new Hud();
 const killcam = new KillcamPlayer();
 const audio = new AudioBus();
+const predicted = new PredictedPlayer();
+
+input.onLook = (yawDelta, pitchDelta) => {
+  predicted.applyLook(yawDelta, pitchDelta);
+};
 
 let myId: string | null = null;
 let snap: Snapshot | null = null;
 let entered = false;
-let lastShotBolt = 0;
 let lastPos = { x: 0, z: 0 };
 let movingSmooth = 0;
+let wasPlaying = false;
 
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
@@ -48,7 +54,15 @@ const net = new Net({
     }
     if (s.phase !== "killcam") killcam.stop();
 
-    // Detect kills for audio
+    const playing = s.you.role === "playing" && s.phase === "playing";
+    const me = s.entities.find((e) => e.id === myId);
+    if (playing && me) {
+      predicted.reconcile(me);
+    } else if (wasPlaying) {
+      predicted.reset();
+    }
+    wasPlaying = playing;
+
     if (prev && s.killFeed[0] && prev.killFeed[0]?.id !== s.killFeed[0].id) {
       audio.hit();
     }
@@ -107,7 +121,7 @@ window.addEventListener("keydown", (e) => {
 
 net.connect();
 
-// Input send loop
+// Input send + local movement prediction
 setInterval(() => {
   if (!snap || snap.you.role !== "playing" || snap.phase !== "playing") {
     input.enabled = false;
@@ -115,9 +129,7 @@ setInterval(() => {
   }
   input.enabled = true;
   const sample = input.sample();
-  if (sample.fire) {
-    // local click feedback; authoritative fire SFX comes from snapshot tracers
-  }
+  predicted.applyInput(sample);
   net.send({ type: "input", input: sample });
 }, 1000 / INPUT_HZ);
 
@@ -128,35 +140,33 @@ function frame(now: number): void {
 
   if (snap) {
     const me = snap.entities.find((e) => e.id === myId);
-    const ads = me?.adsProgress ?? 0;
-    hud.apply(snap, snap.you.role === "playing" ? ads : 0);
+    const playing = snap.you.role === "playing" && snap.phase === "playing";
+    const ads = playing && predicted.alive ? predicted.adsProgress : (me?.adsProgress ?? 0);
+    hud.apply(snap, playing ? ads : 0);
     drawRadar(radarCanvas, snap.entities, myId);
 
     const inKillcam = snap.phase === "killcam";
     const hideId = inKillcam
       ? snap.killcamSubjectId ?? null
-      : snap.you.role === "playing" && snap.phase === "playing"
+      : playing
         ? myId
         : null;
 
     if (killcam.active && inKillcam) {
-      // Actor poses come from the replay timeline, not the frozen death snapshot.
       world.viewmodel.setVisible(false);
       killcam.update(world.camera, world);
     } else {
       world.syncPlayers(snap.entities, hideId, { showDead: false });
-      if (snap.you.role === "playing" && me && me.alive && snap.phase === "playing") {
-        setCameraFromPose(world.camera, me);
+      if (playing && predicted.alive) {
+        setCameraFromPose(world.camera, predicted);
         world.viewmodel.setVisible(true);
-        world.viewmodel.setAds(ads);
-        const distMoved = Math.hypot(me.x - lastPos.x, me.z - lastPos.z);
-        lastPos = { x: me.x, z: me.z };
-        movingSmooth = lerp(movingSmooth, distMoved > 0.02 ? 1 : 0, 0.2);
-        world.viewmodel.update(dt, movingSmooth > 0.35 && ads < 0.55, now / 1000);
-        lastShotBolt = me.boltCooldown;
+        world.viewmodel.setAds(predicted.adsProgress);
+        const distMoved = Math.hypot(predicted.x - lastPos.x, predicted.z - lastPos.z);
+        lastPos = { x: predicted.x, z: predicted.z };
+        movingSmooth = lerp(movingSmooth, distMoved > 0.02 ? 1 : 0, 0.25);
+        world.viewmodel.update(dt, movingSmooth > 0.35 && predicted.adsProgress < 0.55, now / 1000);
       } else {
         world.viewmodel.setVisible(false);
-        // Spectate: follow active player or orbit
         const target =
           snap.entities.find((e) => e.id === snap!.activePlayerId) ??
           snap.entities.find((e) => e.kind === "human") ??

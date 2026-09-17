@@ -30,6 +30,9 @@ const EMPTY: BotAction = {
 /** ~2° yaw / ~2.3° pitch — hitscan must be on the body, not leading it. */
 const FIRE_YAW_ERR = 0.036;
 const FIRE_PITCH_ERR = 0.04;
+/** Force a relocate if Jev barely moves for this long while alive. */
+const CAMP_MS = 2200;
+const CAMP_MOVE_DIST = 1.35;
 
 export class JevController {
   private client: TypeSafeClient | null = null;
@@ -41,6 +44,10 @@ export class JevController {
   /** Sticky "take the shot" until on-target or timeout. */
   private shotIntentUntil = 0;
   private activeEpoch = -1;
+  private lastPos = { x: 0, z: 0 };
+  private lastMovedAt = 0;
+  private forceRelocateUntil = 0;
+  private strafeSign = 1;
 
   constructor(apiKey: string | undefined) {
     this.enabled = Boolean(apiKey);
@@ -63,6 +70,9 @@ export class JevController {
     this.lastAction = { ...EMPTY };
     this.shotIntentUntil = 0;
     this.activeEpoch = -1;
+    this.lastMovedAt = 0;
+    this.forceRelocateUntil = 0;
+    this.targetCover = null;
     // Leave inFlight as-is; commitDecision checks epoch and drops stale results.
   }
 
@@ -71,6 +81,8 @@ export class JevController {
    * rates keep spinning past a strafing player and shots land ahead.
    */
   getAction(self: Fighter, enemy: Fighter | null, now: number): BotAction {
+    this.noteMovement(self, now);
+
     const a = { ...this.lastAction };
     if (!enemy?.alive || !self.alive) {
       a.fire = false;
@@ -78,33 +90,49 @@ export class JevController {
     }
 
     const err = aimErrors(self, enemy);
-    const engaging = a.ads || a.fire || now < this.shotIntentUntil || Math.abs(err.yaw) < 0.7;
-
-    if (engaging) {
-      // Fresh proportional track to CURRENT position — never lead with velocity.
-      a.yawDelta = dampTrack(err.yaw);
-      a.pitchDelta = dampTrack(err.pitch);
-      if (now < this.shotIntentUntil || a.fire) {
-        a.ads = true;
-        a.yawDelta = dampTrack(err.yaw, 18);
-        a.pitchDelta = dampTrack(err.pitch, 18);
-      }
-    }
-
+    const shooting = now < this.shotIntentUntil || a.fire;
     const onTarget =
       Math.abs(err.yaw) <= FIRE_YAW_ERR && Math.abs(err.pitch) <= FIRE_PITCH_ERR;
 
-    if (a.fire || now < this.shotIntentUntil) {
+    // Track toward enemy when roughly facing them or taking a shot — do not
+    // freeze locomotion just because yaw error is small.
+    if (shooting || a.ads || Math.abs(err.yaw) < 0.85) {
+      a.yawDelta = dampTrack(err.yaw, shooting ? 18 : 14);
+      a.pitchDelta = dampTrack(err.pitch, shooting ? 18 : 14);
+    }
+
+    if (shooting) {
+      a.ads = true;
       if (onTarget && self.adsProgress >= 0.65 && self.boltCooldown <= 0) {
         a.fire = true;
-        a.ads = true;
         this.shotIntentUntil = 0;
+        // Plant only for the actual trigger pull.
+        a.forward = 0;
+        a.strafe = 0;
       } else {
         a.fire = false;
-        a.ads = true;
+        // Keep a light peek-strafe while lining up — no hard plant.
+        if (Math.abs(a.forward) + Math.abs(a.strafe) < 0.15) {
+          a.strafe = this.strafeSign * 0.55;
+          a.forward = 0.2;
+        } else {
+          a.forward *= 0.55;
+          a.strafe *= 0.7;
+        }
       }
     } else {
       a.fire = false;
+      // Drop sticky ADS after a miss/bolt so Jev repositions instead of camping.
+      if (self.boltCooldown > 0.35) a.ads = false;
+    }
+
+    if (now < this.forceRelocateUntil) {
+      a.ads = false;
+      a.fire = false;
+      const cover = this.targetCover ?? pickFlankCover(self, enemy);
+      this.targetCover = cover;
+      ({ forward: a.forward, strafe: a.strafe } = moveToward(self, cover.x, cover.z));
+      a.forward = Math.max(0.55, Math.abs(a.forward)) * Math.sign(a.forward || 1);
     }
 
     return a;
@@ -127,13 +155,25 @@ export class JevController {
     }
 
     this.activeEpoch = epoch;
+    this.noteMovement(self, now);
+
+    if (this.lastMovedAt === 0) {
+      this.lastMovedAt = now;
+      this.lastPos = { x: self.x, z: self.z };
+    } else if (now - this.lastMovedAt > CAMP_MS && now >= this.forceRelocateUntil) {
+      this.forceRelocateUntil = now + 1400;
+      this.strafeSign *= -1;
+      this.targetCover = pickFlankCover(self, enemy);
+      console.log("[jev] anti-camp relocate");
+    }
 
     const interval = 1000 / JEV_DECISION_HZ;
     if (now - this.lastDecisionAt < interval) return;
     if (this.inFlight) return;
 
     this.lastDecisionAt = now;
-    const state = buildState(self, enemy, scoreHuman, scoreJev, this.targetCover);
+    const camping = now < this.forceRelocateUntil || now - this.lastMovedAt > CAMP_MS * 0.7;
+    const state = buildState(self, enemy, scoreHuman, scoreJev, this.targetCover, camping);
     const requestEpoch = epoch;
 
     if (this.client && this.enabled) {
@@ -154,8 +194,35 @@ export class JevController {
     }
   }
 
+  private noteMovement(self: Fighter, now: number): void {
+    const dist = Math.hypot(self.x - this.lastPos.x, self.z - this.lastPos.z);
+    if (dist >= CAMP_MOVE_DIST) {
+      this.lastPos = { x: self.x, z: self.z };
+      this.lastMovedAt = now;
+    }
+  }
+
   private commitDecision(action: BotAction, now: number, epoch: number): void {
     if (epoch !== this.activeEpoch) return;
+
+    // Never accept a pure plant while anti-camp is active.
+    if (now < this.forceRelocateUntil) {
+      action.ads = false;
+      action.fire = false;
+      if (Math.abs(action.forward) + Math.abs(action.strafe) < 0.4) {
+        action.forward = 0.9;
+        action.strafe = this.strafeSign * 0.6;
+      }
+    }
+
+    // Convert idle "hold" outcomes into a peek-strafe so Jev doesn't freeze.
+    if (Math.abs(action.forward) + Math.abs(action.strafe) < 0.12 && !action.fire) {
+      this.strafeSign *= -1;
+      action.strafe = this.strafeSign * (0.55 + Math.random() * 0.35);
+      action.forward = 0.35 + Math.random() * 0.35;
+      action.ads = false;
+    }
+
     this.lastAction = action;
     if (action.fire) {
       // Hold shot intent briefly while per-tick tracking catches up — no lead.
@@ -177,14 +244,13 @@ export class JevController {
       state: state as EntryType,
       questions: {
         move: choice(
-          "As an aggressive MW2 quickscoper on Rust, what locomotion should you commit to right now?",
+          "As an aggressive MW2 quickscoper on Rust, pick locomotion. Prefer movement — do NOT camp or stand still.",
           {
             forward: "Push toward the enemy or peek lane",
-            back: "Retreat / create distance",
+            back: "Retreat / create distance while still strafing",
             strafe_left: "Strafe left while peeking",
             strafe_right: "Strafe right while peeking",
-            hold: "Stop and plant feet for a shot",
-            seek_cover: "Break LOS and move to cover",
+            seek_cover: "Break LOS and relocate to a new angle",
             push: "Aggressive rush / close distance hard",
           },
         ),
@@ -206,8 +272,8 @@ export class JevController {
           level: "Track enemy height",
           down: "Look down",
         }),
-        ads: noul("Should you aim down sights (ADS) now for a quickscope?", {
-          true: "Enemy is engageable — ADS",
+        ads: noul("ADS only for a brief quickscope — prefer hip/reposition if not about to shoot.", {
+          true: "Enemy is engageable — short ADS window",
           false: "Keep hip / sprint / reposition",
         }),
         fire: noul(
@@ -232,6 +298,14 @@ export class JevController {
   setCover(c: { x: number; z: number } | null) {
     this.targetCover = c;
   }
+
+  getStrafeSign(): number {
+    return this.strafeSign;
+  }
+
+  flipStrafe(): void {
+    this.strafeSign *= -1;
+  }
 }
 
 function buildState(
@@ -240,6 +314,7 @@ function buildState(
   scoreHuman: number,
   scoreJev: number,
   cover: { x: number; z: number } | null,
+  camping: boolean,
 ) {
   const eye = eyePos(self);
   let enemyState: Record<string, unknown> = { known: false };
@@ -276,7 +351,7 @@ function buildState(
 
   return {
     instruction:
-      "You are Jev, an aggressive MW2-style quickscoper on a Rust-like map. Weapon is HITSCAN: aim at the enemy's current position only — never lead left/right strafes. Prefer peeks and quickscopes. First to 5 kills.",
+      "You are Jev, an aggressive MW2-style quickscoper on a Rust-like map. NEVER camp or stand still — always strafe, peek, or relocate between shots. Weapon is HITSCAN: aim at the enemy's current position only — never lead left/right strafes. First to 5 kills.",
     self: {
       x: Number(self.x.toFixed(2)),
       y: Number(self.y.toFixed(2)),
@@ -289,6 +364,7 @@ function buildState(
       on_ground: self.onGround,
       spawn_protection: self.spawnProtection > 0,
       score: self.score,
+      must_relocate: camping,
     },
     enemy: enemyState,
     map: {
@@ -311,10 +387,10 @@ function composeAction(
   enemy: Fighter | null,
   ctrl: JevController,
 ): BotAction {
-  const move = answers.move?.choice ?? "hold";
-  const yawChoice = answers.yaw?.choice ?? "hold";
+  const move = answers.move?.choice ?? "strafe_right";
+  const yawChoice = answers.yaw?.choice ?? "track_enemy";
   const pitchChoice = answers.pitch?.choice ?? "level";
-  const ads = (answers.ads?.noul ?? 0) > 0.55;
+  const ads = (answers.ads?.noul ?? 0) > 0.62;
   const fire = (answers.fire?.noul ?? 0) > 0.62;
   const jump = (answers.jump?.noul ?? 0) > 0.7;
 
@@ -324,9 +400,11 @@ function composeAction(
     case "forward":
     case "push":
       forward = move === "push" ? 1 : 0.85;
+      strafe = ctrl.getStrafeSign() * 0.35;
       break;
     case "back":
       forward = -0.7;
+      strafe = ctrl.getStrafeSign() * 0.45;
       break;
     case "strafe_left":
       strafe = -1;
@@ -336,17 +414,20 @@ function composeAction(
       strafe = 1;
       forward = 0.35;
       break;
+    case "hold":
+      // Legacy / unexpected hold — convert to peek strafe.
+      strafe = ctrl.getStrafeSign() * 0.7;
+      forward = 0.3;
+      break;
     case "seek_cover": {
-      const cover =
-        COVER_POINTS.slice().sort(
-          (a, b) =>
-            Math.hypot(a.x - self.x, a.z - self.z) - Math.hypot(b.x - self.x, b.z - self.z),
-        )[0]!;
+      const cover = pickFlankCover(self, enemy);
       ctrl.setCover(cover);
       ({ forward, strafe } = moveToward(self, cover.x, cover.z));
       break;
     }
     default:
+      strafe = ctrl.getStrafeSign() * 0.6;
+      forward = 0.4;
       break;
   }
 
@@ -395,7 +476,7 @@ function heuristic(
   ctrl: JevController,
 ): BotAction {
   if (!enemy || !enemy.alive) {
-    return { ...EMPTY, forward: 0.4, strafe: Math.sin(Date.now() / 700) * 0.5 };
+    return { ...EMPTY, forward: 0.55, strafe: Math.sin(Date.now() / 500) * 0.7 };
   }
 
   const eye = eyePos(self);
@@ -420,21 +501,18 @@ function heuristic(
   let jump = false;
 
   if (!visible) {
-    const cover = COVER_POINTS.slice().sort((a, b) => {
-      const da = Math.hypot(a.x - enemy.x, a.z - enemy.z);
-      const db = Math.hypot(b.x - enemy.x, b.z - enemy.z);
-      return da - db;
-    })[Math.floor(Math.random() * 3)]!;
+    const cover = pickFlankCover(self, enemy);
     ctrl.setCover(cover);
     ({ forward, strafe } = moveToward(self, enemy.x, enemy.z));
-    forward *= behind ? 1 : 0.7;
+    forward = Math.max(0.55, forward * (behind ? 1 : 0.85));
+    strafe += ctrl.getStrafeSign() * 0.25;
   } else {
     const onTarget =
       Math.abs(err.yaw) <= FIRE_YAW_ERR && Math.abs(err.pitch) <= FIRE_PITCH_ERR;
-    ads = Math.abs(err.yaw) < 0.35 || dist < 35;
-    strafe = Math.sin(Date.now() / 280) * (dist < 20 ? 0.7 : 0.45);
-    forward = dist > 28 ? 0.7 : dist < 10 ? -0.4 : 0.1;
-    jump = dist < 18 && Math.random() < 0.03;
+    ads = Math.abs(err.yaw) < 0.22 && dist < 32;
+    strafe = Math.sin(Date.now() / 240) * (dist < 20 ? 0.85 : 0.6);
+    forward = dist > 26 ? 0.8 : dist < 10 ? -0.35 : 0.35;
+    jump = dist < 18 && Math.random() < 0.04;
     if (onTarget && self.adsProgress >= 0.65 && self.boltCooldown <= 0) {
       fire = true;
       forward = 0;
@@ -443,6 +521,21 @@ function heuristic(
   }
 
   return { forward, strafe, yawDelta, pitchDelta, jump, ads, fire };
+}
+
+function pickFlankCover(self: Fighter, enemy: Fighter | null): { x: number; z: number } {
+  const ranked = COVER_POINTS.slice().sort((a, b) => {
+    const da = Math.hypot(a.x - self.x, a.z - self.z);
+    const db = Math.hypot(b.x - self.x, b.z - self.z);
+    // Prefer cover that is not right under our feet and not the closest camp spot.
+    const awayA = da < 2.5 ? 20 : da;
+    const awayB = db < 2.5 ? 20 : db;
+    if (!enemy) return awayA - awayB;
+    const flankA = Math.hypot(a.x - enemy.x, a.z - enemy.z);
+    const flankB = Math.hypot(b.x - enemy.x, b.z - enemy.z);
+    return awayA * 0.55 + flankA * 0.45 - (awayB * 0.55 + flankB * 0.45);
+  });
+  return ranked[1 + Math.floor(Math.random() * Math.min(3, ranked.length - 1))] ?? ranked[0]!;
 }
 
 function aimErrors(self: Fighter, enemy: Fighter): { yaw: number; pitch: number } {

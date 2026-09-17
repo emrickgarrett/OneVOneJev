@@ -75,8 +75,12 @@ Vercel alone cannot host this: serverless/edge functions are short-lived and do 
 ### Steps
 
 1. Open [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub repo** → select `OneVOneJev`.
-2. Railway builds with the root [`Dockerfile`](Dockerfile) (see also [`railway.toml`](railway.toml)).
-3. Open the service → **Variables** → add:
+2. **Important service settings** (Service → Settings):
+   - **Root Directory:** leave **empty** / repo root — do **not** set it to `client`
+   - **Builder:** Dockerfile (uses root [`Dockerfile`](Dockerfile))
+   - **Custom Start Command:** leave empty, or set exactly `npm start` (never `npm run dev` / `vite`)
+3. Railway builds the image; start command is `npm start` (Node game server serves `client/dist` + `/ws`).
+4. Open the service → **Variables** → add:
 
    | Variable | Value |
    | --- | --- |
@@ -84,11 +88,19 @@ Vercel alone cannot host this: serverless/edge functions are short-lived and do 
 
    Railway sets `PORT` for you. The container already uses `HOST=0.0.0.0`.
 
-4. **Settings → Networking → Generate Domain** (HTTPS + WSS on the same host).
-5. Open the public URL — you should see the **1v1 JEV** lobby.
-6. Sanity checks:
+5. **Settings → Networking → Generate Domain** (HTTPS + WSS on the same host).
+6. Open the public URL — you should see the **1v1 JEV** lobby.
+7. Sanity checks:
    - `https://YOUR_DOMAIN/health` → `{"ok":true}`
    - Join Queue → countdown → match (WebSocket on `/ws`)
+
+### If you see `vite: not found` / `npm run dev`
+
+Railway tried to run the **Vite client** instead of the production server. Fix:
+
+1. Root Directory = repo root (not `client`)
+2. Start Command = `npm start` (clear any `dev` / `vite` override)
+3. Redeploy
 
 ### Local production parity
 

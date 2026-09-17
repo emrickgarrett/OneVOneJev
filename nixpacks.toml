@@ -1,0 +1,14 @@
+# Fallback if Railway is not using the Dockerfile.
+# Production must run the Node game server (serves client/dist + /ws).
+
+[phases.setup]
+nixPkgs = ["nodejs_22"]
+
+[phases.install]
+cmds = ["npm ci"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "npm start"

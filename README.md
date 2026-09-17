@@ -55,53 +55,49 @@ Serves the built client from the Node server on `PORT` (default `3001`).
 
 The server builds structured JSON state each decision tick (~9 Hz) and fans out Choice/Noul questions (move, yaw, pitch, ADS, fire, jump). API key stays on the server. Calls run only while a match is in `playing` and both fighters are alive. If TypeSafe is unreachable, a deterministic heuristic uses the same action interface so matches never stall.
 
-## Deploy
+## Deploy (Railway)
 
-Vercel is great for the **static client**, but this game needs a **persistent Node WebSocket server**. Deploy in two pieces:
+**Recommended:** one Railway service runs the Node game server **and** serves the built client. Same origin means the browser uses `wss://your-domain/ws` automatically — no Vercel split, no `VITE_WS_URL`.
 
 ```text
-Browser  →  Vercel (client/dist)
-                │
-                └── wss://…/ws  →  Railway / Fly / Render (Node game server)
+Browser ──HTTPS──► Railway (UI from client/dist)
+       └──WSS /ws──► Railway (match sim + Jev)
 ```
 
-### 1. Game server (required for multiplayer + Jev)
+Vercel alone cannot host this: serverless/edge functions are short-lived and do not support sticky WebSocket rooms + a 60 Hz sim.
 
-Pick any host that supports long-lived WebSockets (Railway, Fly.io, Render, a VPS).
+### Prerequisites
 
-1. Deploy this repo as a Node service.
-2. Start command: `npm run build && npm start`
-3. Set env:
-   - `TYPESAFE_API_KEY` — your TypeSafe key (**never** put this on Vercel)
-   - `PORT` — usually provided by the host
-   - `HOST=0.0.0.0`
-4. Confirm `GET /health` returns `{"ok":true}` and `WS /ws` accepts connections.
-5. Note the public origin, e.g. `https://onevonejev-server.up.railway.app`
+- GitHub repo: [emrickgarrett/OneVOneJev](https://github.com/emrickgarrett/OneVOneJev)
+- A TypeSafe API key (`TYPESAFE_API_KEY`)
+- A [Railway](https://railway.app) account (GitHub login)
 
-Optional single-host mode: the Node server also serves `client/dist` after `npm run build`, so you can skip Vercel and open the server URL directly.
+### Steps
 
-### 2. Client on Vercel
+1. Open [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub repo** → select `OneVOneJev`.
+2. Railway builds with the root [`Dockerfile`](Dockerfile) (see also [`railway.toml`](railway.toml)).
+3. Open the service → **Variables** → add:
 
-1. Import the GitHub repo into [Vercel](https://vercel.com).
-2. Root directory: repository root (uses [`vercel.json`](vercel.json)).
-3. Framework preset: **Other** (build/output are already set).
-4. Environment variable (Production + Preview):
-
-   | Name | Value |
+   | Variable | Value |
    | --- | --- |
-   | `VITE_WS_URL` | `wss://YOUR_GAME_SERVER_HOST/ws` |
+   | `TYPESAFE_API_KEY` | your TypeSafe key |
 
-   Example: `wss://onevonejev-server.up.railway.app/ws`
+   Railway sets `PORT` for you. The container already uses `HOST=0.0.0.0`.
 
-5. Deploy. The client reads `VITE_WS_URL` at build time (`import.meta.env`), so change the server URL → **redeploy** the Vercel project.
+4. **Settings → Networking → Generate Domain** (HTTPS + WSS on the same host).
+5. Open the public URL — you should see the **1v1 JEV** lobby.
+6. Sanity checks:
+   - `https://YOUR_DOMAIN/health` → `{"ok":true}`
+   - Join Queue → countdown → match (WebSocket on `/ws`)
 
-### 3. Checklist
+### Local production parity
 
-- [ ] `TYPESAFE_API_KEY` only on the game server
-- [ ] `VITE_WS_URL` uses `wss://` (not `ws://`) when the site is HTTPS
-- [ ] Game server allows WebSocket upgrade on `/ws`
-- [ ] Locally, leave `VITE_WS_URL` unset so Vite proxies `/ws` → `localhost:3001`
+```bash
+npm run build
+npm start
+# open http://localhost:3001
+```
 
-### Why not “all on Vercel”?
+### Cost notes
 
-Vercel serverless/edge functions are short-lived and are not a fit for a 60 Hz authoritative sim with sticky WebSocket rooms. Keep the arena process on a normal Node host; use Vercel for the front-end CDN.
+Railway’s hobby/trial tier is enough for a small public demo. TypeSafe usage scales with live match time (~9 Jev decisions/sec while `playing`).

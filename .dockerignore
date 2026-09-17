@@ -1,0 +1,16 @@
+node_modules
+**/node_modules
+**/dist
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+.vite
+*.log
+.DS_Store
+*.tsbuildinfo
+.cursor
+agent-transcripts
+README.md
+vercel.json

@@ -14,7 +14,14 @@ export class Hud {
   btnQueue = document.getElementById("btnHudQueue")!;
   btnLeaveQueue = document.getElementById("btnHudLeaveQueue")!;
   btnQuit = document.getElementById("btnHudQuit")!;
+  btnMute = document.getElementById("btnMute")!;
   private lastCountdown = -1;
+
+  setMuteUi(muted: boolean): void {
+    this.btnMute.textContent = muted ? "Unmute" : "Mute";
+    this.btnMute.setAttribute("aria-pressed", muted ? "true" : "false");
+    this.btnMute.classList.toggle("muted", muted);
+  }
 
   apply(snap: Snapshot, adsProgress: number): void {
     this.scoreHuman.textContent = String(snap.scoreHuman);

@@ -113,6 +113,11 @@ hud.btnQuit.addEventListener("click", () => {
   document.exitPointerLock?.();
   local.reset();
 });
+hud.setMuteUi(audio.muted);
+hud.btnMute.addEventListener("click", () => {
+  audio.resume();
+  hud.setMuteUi(audio.toggleMute());
+});
 
 chatForm.addEventListener("submit", (e) => {
   e.preventDefault();

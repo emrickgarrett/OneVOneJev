@@ -141,6 +141,26 @@ export class MatchRoom {
         this.queue = this.queue.filter((q) => q !== c.id);
         if (c.role === "queued") c.role = "spectating";
         break;
+      case "quit_to_spectate":
+        if (c.id === this.activePlayerId) {
+          this.broadcast({
+            type: "chat",
+            msg: {
+              id: uid(),
+              from: "SYSTEM",
+              text: `${c.name} left the arena to spectate.`,
+              t: Date.now(),
+            },
+          });
+          this.endActiveMatch(false);
+          this.promoteNext();
+        } else if (c.role === "queued") {
+          this.queue = this.queue.filter((q) => q !== c.id);
+          c.role = "spectating";
+        } else {
+          c.role = "spectating";
+        }
+        break;
       case "input":
         if (c.id === this.activePlayerId && this.phase === "playing") {
           c.lastInput = msg.input;
@@ -396,20 +416,46 @@ export class MatchRoom {
     this.matchStartedAt = 0;
 
     const finishedId = this.activePlayerId;
+    // Always drop the finished player from any mid-match queue entry first.
+    if (finishedId) {
+      this.queue = this.queue.filter((q) => q !== finishedId);
+    }
+
     if (finishedId) {
       const c = this.clients.get(finishedId);
       if (c) {
         if (completed) {
-          // Rematch rotation: finished challenger goes to the back of the queue.
-          // Solo players immediately get another go after killcam/intermission.
-          this.queue = this.queue.filter((q) => q !== finishedId);
-          this.enqueue(finishedId, { force: true });
+          const othersQueued = this.queue.length > 0;
+          const othersConnected = [...this.clients.values()].some((x) => x.id !== finishedId);
+
+          if (othersQueued) {
+            // Someone is already waiting — finished player goes to the back.
+            this.queue.push(finishedId);
+            c.role = "queued";
+          } else if (!othersConnected) {
+            // Truly solo — rematch immediately after killcam/intermission.
+            this.queue.push(finishedId);
+            c.role = "queued";
+          } else {
+            // Other people are connected but only spectating. Don't hog the
+            // arena — sit out so the next Join Queue gets the turn.
+            c.role = "spectating";
+            this.broadcast({
+              type: "chat",
+              msg: {
+                id: uid(),
+                from: "SYSTEM",
+                text: `${c.name} finished — next challenger can Join Queue.`,
+                t: Date.now(),
+              },
+            });
+          }
         } else {
           c.role = "spectating";
-          this.queue = this.queue.filter((q) => q !== finishedId);
         }
       }
     }
+
     this.activePlayerId = null;
     this.human = null;
     this.phase = "waiting";
@@ -419,6 +465,8 @@ export class MatchRoom {
 
   private promoteNext(): void {
     if (this.phase !== "waiting" && this.phase !== "intermission") return;
+    // Never start a second match while one is still bound.
+    if (this.activePlayerId) return;
 
     // Drop stale queue entries
     this.queue = this.queue.filter((id) => this.clients.has(id));
@@ -436,6 +484,9 @@ export class MatchRoom {
       return;
     }
 
+    // Ensure the promoted player isn't also lingering in the queue.
+    this.queue = this.queue.filter((q) => q !== nextId);
+
     next.role = "playing";
     this.activePlayerId = next.id;
     this.human = createFighter(next.id, next.name, "human", 0);
@@ -446,6 +497,16 @@ export class MatchRoom {
     this.scoreJev = 0;
     this.jevEpoch++;
     this.jevCtrl.reset();
+
+    this.broadcast({
+      type: "chat",
+      msg: {
+        id: uid(),
+        from: "SYSTEM",
+        text: `${next.name} is up — fight starts soon.`,
+        t: Date.now(),
+      },
+    });
   }
 
   private broadcastSnapshots(): void {

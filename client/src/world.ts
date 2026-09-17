@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { MAP_BOXES, MAP_BOUNDS } from "@onevonejev/shared";
-import { createOperator, createViewmodel, preloadModels } from "./models";
+import { createOperator, createViewmodel, preloadModels, updateOperators } from "./models";
 
 export function createWorld(canvas: HTMLCanvasElement) {
   preloadModels();
@@ -109,6 +109,11 @@ export function createWorld(canvas: HTMLCanvasElement) {
   scene.add(beacon);
 
   const players = new Map<string, THREE.Group>();
+  /** Latest authoritative pose from snapshots — rendered with smoothing. */
+  const poseTargets = new Map<
+    string,
+    { x: number; y: number; z: number; yaw: number; hard?: boolean }
+  >();
   const viewmodel = createViewmodel();
   camera.add(viewmodel.root);
   scene.add(camera);
@@ -142,14 +147,52 @@ export function createWorld(canvas: HTMLCanvasElement) {
       seen.add(e.id);
       const g = getOrCreatePlayer(e.id, e.kind);
       g.visible = e.id !== hideId && (e.alive || showDead);
-      g.position.set(e.x, e.y, e.z);
-      g.rotation.y = -e.yaw + Math.PI / 2;
+
+      const prev = poseTargets.get(e.id);
+      const jump =
+        !prev ||
+        Math.hypot(e.x - prev.x, e.y - prev.y, e.z - prev.z) > 3.5 ||
+        !g.visible;
+      poseTargets.set(e.id, { x: e.x, y: e.y, z: e.z, yaw: e.yaw, hard: jump });
+      if (jump) {
+        g.position.set(e.x, e.y, e.z);
+        g.rotation.y = -e.yaw + Math.PI / 2;
+      }
     }
     for (const [id, g] of players) {
       if (!seen.has(id)) {
         scene.remove(g);
         players.delete(id);
+        poseTargets.delete(id);
       }
+    }
+  }
+
+  function lerpAngle(a: number, b: number, t: number): number {
+    let d = b - a;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    return a + d * t;
+  }
+
+  function smoothPlayers(dt: number): void {
+    // High rate tracks 20Hz snaps closely without the stair-step jitter.
+    const a = 1 - Math.exp(-18 * dt);
+    for (const [id, g] of players) {
+      const t = poseTargets.get(id);
+      if (!t || !g.visible) continue;
+      if (t.hard) {
+        g.position.set(t.x, t.y, t.z);
+        g.rotation.y = -t.yaw + Math.PI / 2;
+        t.hard = false;
+        continue;
+      }
+      g.position.x += (t.x - g.position.x) * a;
+      g.position.y += (t.y - g.position.y) * a;
+      g.position.z += (t.z - g.position.z) * a;
+      const curYaw = -(g.rotation.y - Math.PI / 2);
+      const nextYaw = lerpAngle(curYaw, t.yaw, a);
+      g.rotation.y = -nextYaw + Math.PI / 2;
     }
   }
 
@@ -202,6 +245,7 @@ export function createWorld(canvas: HTMLCanvasElement) {
     g.visible = visible;
     g.position.set(pose.x, pose.y, pose.z);
     g.rotation.y = -pose.yaw + Math.PI / 2;
+    poseTargets.set(id, { x: pose.x, y: pose.y, z: pose.z, yaw: pose.yaw, hard: true });
   }
 
   return {
@@ -214,6 +258,10 @@ export function createWorld(canvas: HTMLCanvasElement) {
     updateTracers,
     viewmodel,
     bounds: MAP_BOUNDS,
+    update(dt: number) {
+      smoothPlayers(dt);
+      updateOperators(players.values(), dt);
+    },
     render() {
       renderer.render(scene, camera);
     },

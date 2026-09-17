@@ -343,8 +343,32 @@ body,
   position: absolute;
   top: 1rem;
   left: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
   font-size: 0.85rem;
   text-shadow: 0 1px 4px #000;
+  pointer-events: none;
+}
+
+#hudActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+  pointer-events: auto;
+}
+
+.btn.hud-btn {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.btn.hud-btn.hidden {
+  display: none;
 }
 
 #radar {

@@ -223,6 +223,10 @@ export class JevController {
       action.ads = false;
     }
 
+    // Blend locomotion so 9Hz decisions don't stair-step visually.
+    action.forward = this.lastAction.forward * 0.4 + action.forward * 0.6;
+    action.strafe = this.lastAction.strafe * 0.4 + action.strafe * 0.6;
+
     this.lastAction = action;
     if (action.fire) {
       // Hold shot intent briefly while per-tick tracking catches up — no lead.

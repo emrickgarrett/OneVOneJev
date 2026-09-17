@@ -102,6 +102,18 @@ nameInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") enterArena(true);
 });
 
+hud.btnQueue.addEventListener("click", () => {
+  net.send({ type: "join_queue" });
+});
+hud.btnLeaveQueue.addEventListener("click", () => {
+  net.send({ type: "leave_queue" });
+});
+hud.btnQuit.addEventListener("click", () => {
+  net.send({ type: "quit_to_spectate" });
+  document.exitPointerLock?.();
+  local.reset();
+});
+
 chatForm.addEventListener("submit", (e) => {
   e.preventDefault();
   const text = chatInput.value.trim();
@@ -114,9 +126,16 @@ chatForm.addEventListener("submit", (e) => {
 window.addEventListener("keydown", (e) => {
   if (e.code === "KeyT" && entered && document.activeElement !== chatInput) {
     e.preventDefault();
+    input.clearKeys();
+    document.exitPointerLock?.();
     chatInput.focus();
   }
   if (e.code === "Escape") chatInput.blur();
+});
+
+chatInput.addEventListener("focus", () => {
+  input.clearKeys();
+  document.exitPointerLock?.();
 });
 
 net.connect();
@@ -200,6 +219,7 @@ function frame(now: number): void {
   }
 
   world.updateTracers(dt);
+  world.update(dt);
   world.render();
   requestAnimationFrame(frame);
 }

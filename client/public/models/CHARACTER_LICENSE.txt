@@ -1,0 +1,18 @@
+character-animated.glb — provenance + license
+=================================================
+
+Model:      "Character Animated" by Quaternius
+Source:     https://poly.pizza/m/DgOCW9ZCRJ
+            (direct GLB: https://static.poly.pizza/1a8a9d55-9aa9-43c4-a031-d926e251d80a.glb)
+Author:     Quaternius (https://quaternius.com)
+License:    CC0 1.0 Universal (Public Domain Dedication)
+            https://creativecommons.org/publicdomain/zero/1.0/
+            No attribution required. Bundled here for offline use so the
+            living world never depends on a runtime fetch of a 3rd-party CDN.
+
+Contents:   1 rigged skinned humanoid (31 joints), 24 unlabeled animation
+            clips. We use clip 19 (idle, by motion analysis) and clip 22
+            (walk). See components/world3d/RiggedCharacter.tsx for the
+            full honesty note on blind clip selection.
+
+Downloaded: 2026-07-10 for the KathaKitaab living-world rigged-human work.

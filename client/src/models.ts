@@ -1,5 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
+import { PLAYER_HEIGHT } from "@onevonejev/shared";
 
 const gunmetal = () =>
   new THREE.MeshStandardMaterial({ color: 0x2a2e32, metalness: 0.85, roughness: 0.35 });
@@ -20,10 +22,24 @@ const glass = () =>
 
 /** Quaternius Ultimate Guns Pack sniper — CC0 (see public/models/CREDITS.txt). */
 const SNIPER_URL = "/models/sniper.glb";
+/** Quaternius Character Animated (Rogue) — CC0. */
+const CHARACTER_URL = "/models/character.glb";
 
 let sniperTemplate: THREE.Group | null = null;
 let sniperLoad: Promise<THREE.Group> | null = null;
 const sniperSlots: THREE.Group[] = [];
+
+type CharAsset = {
+  scene: THREE.Object3D;
+  animations: THREE.AnimationClip[];
+  height: number;
+};
+let charAsset: CharAsset | null = null;
+let charLoad: Promise<CharAsset> | null = null;
+const charPending: Array<{
+  root: THREE.Group;
+  kind: "human" | "jev";
+}> = [];
 
 function ensureSniperLoaded(): Promise<THREE.Group> {
   if (sniperTemplate) return Promise.resolve(sniperTemplate);
@@ -36,7 +52,6 @@ function ensureSniperLoaded(): Promise<THREE.Group> {
       (gltf) => {
         const root = new THREE.Group();
         root.add(gltf.scene);
-        // Quaternius units are large; normalize to ~1m barrel length.
         const box = new THREE.Box3().setFromObject(root);
         const size = new THREE.Vector3();
         box.getSize(size);
@@ -46,7 +61,6 @@ function ensureSniperLoaded(): Promise<THREE.Group> {
         const center = new THREE.Vector3();
         box.getCenter(center);
         root.position.sub(center);
-        // Sit grip near origin; barrel along +X like the procedural kit.
         root.position.y += 0.04;
 
         root.traverse((o) => {
@@ -100,9 +114,124 @@ export function createSniperRifle(): THREE.Group {
   return slot;
 }
 
+function ensureCharacterLoaded(): Promise<CharAsset> {
+  if (charAsset) return Promise.resolve(charAsset);
+  if (charLoad) return charLoad;
+
+  charLoad = new Promise((resolve, reject) => {
+    const loader = new GLTFLoader();
+    loader.load(
+      CHARACTER_URL,
+      (gltf) => {
+        const box = new THREE.Box3().setFromObject(gltf.scene);
+        const size = new THREE.Vector3();
+        box.getSize(size);
+        charAsset = {
+          scene: gltf.scene,
+          animations: gltf.animations,
+          height: size.y || 1,
+        };
+        for (const p of charPending.splice(0)) {
+          mountCharacter(p.root, p.kind);
+        }
+        resolve(charAsset);
+      },
+      undefined,
+      (err) => {
+        console.warn("[models] character.glb failed, using procedural fallback", err);
+        reject(err);
+      },
+    );
+  });
+
+  return charLoad;
+}
+
 /** Kick off asset load early (call from world bootstrap). */
 export function preloadModels(): void {
   void ensureSniperLoaded().catch(() => undefined);
+  void ensureCharacterLoaded().catch(() => undefined);
+}
+
+function tintOperator(root: THREE.Object3D, kind: "human" | "jev"): void {
+  // Mild accent grades — preserve albedo/maps. Heavy lerp + body emissive
+  // previously washed Quaternius materials into bright pink/magenta.
+  const accent = new THREE.Color(kind === "jev" ? 0xb85a20 : 0x4a6b52);
+  const strength = kind === "jev" ? 0.26 : 0.18;
+  root.traverse((o) => {
+    if (!(o instanceof THREE.Mesh)) return;
+    o.castShadow = true;
+    o.receiveShadow = true;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    const next = mats.map((m) => {
+      const src = m as THREE.MeshStandardMaterial;
+      const c = src.clone();
+      if (c.color) {
+        // Light materials (skin, cloth highlights) get a softer grade so they
+        // don't flip toward coral/magenta under orange accents.
+        const lum = 0.2126 * c.color.r + 0.7152 * c.color.g + 0.0722 * c.color.b;
+        const localStrength = lum > 0.5 ? strength * 0.4 : strength;
+        c.color.lerp(accent, localStrength);
+      }
+      if ("emissive" in c) {
+        // Drop full-body glow; keep model lit by the scene only.
+        c.emissive.setHex(0x000000);
+        if ("emissiveIntensity" in c) c.emissiveIntensity = 0;
+      }
+      c.needsUpdate = true;
+      return c;
+    });
+    o.material = Array.isArray(o.material) ? next : next[0]!;
+  });
+}
+
+function attachRifleToHand(character: THREE.Object3D): void {
+  const hand =
+    character.getObjectByName("FistR") ??
+    character.getObjectByName("HandR") ??
+    character.getObjectByName("mixamorigRightHand");
+  const rifle = createSniperRifle();
+  rifle.scale.setScalar(0.42);
+  rifle.position.set(0.02, 0.04, 0.12);
+  rifle.rotation.set(-Math.PI / 2, 0.15, Math.PI / 2);
+  if (hand) {
+    hand.add(rifle);
+  } else {
+    rifle.position.set(0.25, 1.05, 0.3);
+    rifle.scale.setScalar(0.95);
+    character.add(rifle);
+  }
+}
+
+function playIdle(root: THREE.Group, character: THREE.Object3D, clips: THREE.AnimationClip[]): void {
+  const mixer = new THREE.AnimationMixer(character);
+  const idle =
+    clips.find((c) => c.name === "Idle") ??
+    clips.find((c) => /idle/i.test(c.name) && !/attack/i.test(c.name)) ??
+    clips[0];
+  if (idle) {
+    const action = mixer.clipAction(idle);
+    action.play();
+  }
+  root.userData.mixer = mixer;
+}
+
+function mountCharacter(root: THREE.Group, kind: "human" | "jev"): void {
+  if (!charAsset) return;
+  while (root.children.length) root.remove(root.children[0]!);
+
+  const character = cloneSkinned(charAsset.scene) as THREE.Object3D;
+  const scale = PLAYER_HEIGHT / charAsset.height;
+  character.scale.setScalar(scale);
+
+  // Ground the feet at y = 0.
+  const box = new THREE.Box3().setFromObject(character);
+  character.position.y -= box.min.y;
+
+  tintOperator(character, kind);
+  attachRifleToHand(character);
+  playIdle(root, character, charAsset.animations);
+  root.add(character);
 }
 
 /** Procedural kitbash fallback if the GLB is missing. */
@@ -196,8 +325,7 @@ function limb(
   return m;
 }
 
-/** Third-person operator with held sniper. */
-export function createOperator(kind: "human" | "jev"): THREE.Group {
+function createProceduralOperator(kind: "human" | "jev"): THREE.Group {
   const root = new THREE.Group();
   const isJev = kind === "jev";
   const suit = new THREE.MeshStandardMaterial({
@@ -213,12 +341,9 @@ export function createOperator(kind: "human" | "jev"): THREE.Group {
   const skin = new THREE.MeshStandardMaterial({ color: 0xd4b896, roughness: 0.85 });
   const dark = new THREE.MeshStandardMaterial({ color: 0x1c1c1c, roughness: 0.6 });
 
-  const hips = limb(0.38, 0.22, 0.24, suit, 0.72);
-  root.add(hips);
-  const torso = limb(0.42, 0.48, 0.26, suit, 1.1);
-  root.add(torso);
-  const vest = limb(0.44, 0.28, 0.28, accent, 1.12);
-  root.add(vest);
+  root.add(limb(0.38, 0.22, 0.24, suit, 0.72));
+  root.add(limb(0.42, 0.48, 0.26, suit, 1.1));
+  root.add(limb(0.44, 0.28, 0.28, accent, 1.12));
 
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 16), skin);
   head.position.y = 1.52;
@@ -282,6 +407,30 @@ export function createOperator(kind: "human" | "jev"): THREE.Group {
   return root;
 }
 
+/** Third-person operator — Quaternius character GLB when ready. */
+export function createOperator(kind: "human" | "jev"): THREE.Group {
+  const root = new THREE.Group();
+  root.userData.kind = kind;
+
+  if (charAsset) {
+    mountCharacter(root, kind);
+  } else {
+    root.add(createProceduralOperator(kind));
+    charPending.push({ root, kind });
+    void ensureCharacterLoaded().catch(() => undefined);
+  }
+
+  return root;
+}
+
+/** Advance character animation mixers. */
+export function updateOperators(roots: Iterable<THREE.Object3D>, dt: number): void {
+  for (const root of roots) {
+    const mixer = root.userData.mixer as THREE.AnimationMixer | undefined;
+    mixer?.update(dt);
+  }
+}
+
 /** First-person viewmodel parented to the camera. */
 export function createViewmodel(): {
   root: THREE.Group;
@@ -292,7 +441,6 @@ export function createViewmodel(): {
   const root = new THREE.Group();
   const rifle = createSniperRifle();
   rifle.scale.setScalar(1.2);
-  // Rest pose: lower-right of view
   rifle.position.set(0.28, -0.28, -0.55);
   rifle.rotation.set(0.08, Math.PI * 0.52, 0.12);
   root.add(rifle);
@@ -326,7 +474,6 @@ export function createViewmodel(): {
       root.position.lerpVectors(hipPos, adsHide, t);
       root.position.y += bob * (1 - t);
       root.position.x += sway * (1 - t);
-      // Fade out when scoped
       root.visible = ads < 0.85;
       void dt;
     },

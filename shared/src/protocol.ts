@@ -126,6 +126,7 @@ export type ClientMessage =
   | { type: "chat"; text: string }
   | { type: "join_queue" }
   | { type: "leave_queue" }
+  | { type: "quit_to_spectate" }
   | { type: "ping"; t: number };
 
 export type ServerMessage =

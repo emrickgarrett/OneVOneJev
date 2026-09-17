@@ -1,5 +1,5 @@
 export const TICK_HZ = 60;
-export const SNAPSHOT_HZ = 20;
+export const SNAPSHOT_HZ = 30;
 export const INPUT_HZ = 60;
 export const JEV_DECISION_HZ = 9;
 

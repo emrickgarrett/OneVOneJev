@@ -9,10 +9,13 @@ export class Input {
 
   constructor(canvas: HTMLCanvasElement) {
     window.addEventListener("keydown", (e) => {
+      if (isTypingTarget(e.target)) return;
       this.keys.add(e.code);
       if (e.code === "Space") e.preventDefault();
     });
-    window.addEventListener("keyup", (e) => this.keys.delete(e.code));
+    window.addEventListener("keyup", (e) => {
+      this.keys.delete(e.code);
+    });
 
     canvas.addEventListener("click", () => {
       if (this.enabled) canvas.requestPointerLock();
@@ -32,6 +35,11 @@ export class Input {
       if (e.button === 2) this.ads = false;
     });
     canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+  }
+
+  /** Drop held movement keys (e.g. when opening chat). */
+  clearKeys(): void {
+    this.keys.clear();
   }
 
   moveState(): { forward: number; strafe: number; jump: boolean; ads: boolean } {
@@ -55,4 +63,10 @@ export class Input {
     this.fireQueued = false;
     return f;
   }
+}
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable;
 }

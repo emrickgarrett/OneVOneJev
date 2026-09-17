@@ -1,5 +1,12 @@
-# Quaternius SniperRifle (CC0)
+# Quaternius assets (CC0)
 
+## SniperRifle
 Source: Quaternius Ultimate Guns Pack (CC0 / public domain)
-Via: https://quaternius.com — also mirrored in community repos as SniperRifle_1
-License: Creative Commons Zero (CC0) — free for commercial use, no attribution required
+Via: https://quaternius.com
+License: Creative Commons Zero (CC0)
+
+## Character (Rogue / Character Animated)
+Source: Quaternius Character Animated — https://poly.pizza/m/DgOCW9ZCRJ
+Author: Quaternius (https://quaternius.com)
+License: Creative Commons Zero (CC0 1.0)
+File: character.glb

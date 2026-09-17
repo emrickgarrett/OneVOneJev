@@ -11,6 +11,9 @@ export class Hud {
   chat = document.getElementById("chat")!;
   scope = document.getElementById("scopeOverlay")!;
   crosshair = document.getElementById("crosshair")!;
+  btnQueue = document.getElementById("btnHudQueue")!;
+  btnLeaveQueue = document.getElementById("btnHudLeaveQueue")!;
+  btnQuit = document.getElementById("btnHudQuit")!;
   private lastCountdown = -1;
 
   apply(snap: Snapshot, adsProgress: number): void {
@@ -30,6 +33,13 @@ export class Hud {
         : snap.activePlayerName
           ? `Now playing: ${snap.activePlayerName}`
           : "Waiting for challenger…";
+
+    const showQueue = snap.you.role === "spectating";
+    const showLeave = snap.you.role === "queued";
+    const showQuit = snap.you.role === "playing";
+    this.btnQueue.classList.toggle("hidden", !showQueue);
+    this.btnLeaveQueue.classList.toggle("hidden", !showLeave);
+    this.btnQuit.classList.toggle("hidden", !showQuit);
 
     this.killfeed.innerHTML = snap.killFeed
       .slice(0, 5)

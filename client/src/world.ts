@@ -248,12 +248,34 @@ export function createWorld(canvas: HTMLCanvasElement) {
     poseTargets.set(id, { x: pose.x, y: pose.y, z: pose.z, yaw: pose.yaw, hard: true });
   }
 
+  /** Interpolated pose for chase cams / UI (after `update`). */
+  function getRenderPose(id: string | null | undefined): {
+    x: number;
+    y: number;
+    z: number;
+    yaw: number;
+  } | null {
+    if (!id) return null;
+    const g = players.get(id);
+    if (g) {
+      return {
+        x: g.position.x,
+        y: g.position.y,
+        z: g.position.z,
+        yaw: -(g.rotation.y - Math.PI / 2),
+      };
+    }
+    const t = poseTargets.get(id);
+    return t ? { x: t.x, y: t.y, z: t.z, yaw: t.yaw } : null;
+  }
+
   return {
     renderer,
     scene,
     camera,
     syncPlayers,
     setPlayerPose,
+    getRenderPose,
     showTracer,
     updateTracers,
     viewmodel,

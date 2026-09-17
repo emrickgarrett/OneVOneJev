@@ -35,6 +35,16 @@ let entered = false;
 let lastPos = { x: 0, z: 0 };
 let movingSmooth = 0;
 let wasPlaying = false;
+/** Smoothed spectator chase camera (follows interpolated subject). */
+const specCam = {
+  x: 0,
+  y: 12,
+  z: 28,
+  lx: 0,
+  ly: 3,
+  lz: 0,
+  seeded: false,
+};
 
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
@@ -199,8 +209,11 @@ function frame(now: number): void {
     if (killcam.active && inKillcam) {
       world.viewmodel.setVisible(false);
       killcam.update(world.camera, world);
+      world.update(dt);
+      specCam.seeded = false;
     } else {
       world.syncPlayers(snap.entities, hideId, { showDead: false });
+      world.update(dt);
       if (playing && local.alive) {
         setCameraFromPose(world.camera, local);
         world.viewmodel.setVisible(true);
@@ -209,34 +222,63 @@ function frame(now: number): void {
         lastPos = { x: local.x, z: local.z };
         movingSmooth = lerp(movingSmooth, distMoved > 0.015 ? 1 : 0, 0.3);
         world.viewmodel.update(dt, movingSmooth > 0.35 && local.adsProgress < 0.55, now / 1000);
+        specCam.seeded = false;
       } else {
         world.viewmodel.setVisible(false);
-        const target =
-          snap.entities.find((e) => e.id === snap!.activePlayerId) ??
-          snap.entities.find((e) => e.kind === "human") ??
-          snap.entities.find((e) => e.kind === "jev");
+        const subjectId =
+          snap.activePlayerId ??
+          snap.entities.find((e) => e.kind === "human")?.id ??
+          snap.entities.find((e) => e.kind === "jev")?.id ??
+          null;
+        const target = world.getRenderPose(subjectId);
         if (target) {
           const behind = 5;
           const height = 2.2;
-          world.camera.position.set(
-            target.x - Math.cos(target.yaw) * behind,
-            target.y + height,
-            target.z - Math.sin(target.yaw) * behind,
-          );
-          world.camera.lookAt(target.x, target.y + PLAYER_EYE, target.z);
-          world.camera.fov = 70;
-          world.camera.updateProjectionMatrix();
+          const wantX = target.x - Math.cos(target.yaw) * behind;
+          const wantY = target.y + height;
+          const wantZ = target.z - Math.sin(target.yaw) * behind;
+          const lookX = target.x;
+          const lookY = target.y + PLAYER_EYE;
+          const lookZ = target.z;
+          const jump =
+            !specCam.seeded ||
+            Math.hypot(wantX - specCam.x, wantY - specCam.y, wantZ - specCam.z) > 8;
+          if (jump) {
+            specCam.x = wantX;
+            specCam.y = wantY;
+            specCam.z = wantZ;
+            specCam.lx = lookX;
+            specCam.ly = lookY;
+            specCam.lz = lookZ;
+            specCam.seeded = true;
+          } else {
+            const a = 1 - Math.exp(-10 * dt);
+            specCam.x = lerp(specCam.x, wantX, a);
+            specCam.y = lerp(specCam.y, wantY, a);
+            specCam.z = lerp(specCam.z, wantZ, a);
+            specCam.lx = lerp(specCam.lx, lookX, a);
+            specCam.ly = lerp(specCam.ly, lookY, a);
+            specCam.lz = lerp(specCam.lz, lookZ, a);
+          }
+          world.camera.position.set(specCam.x, specCam.y, specCam.z);
+          world.camera.lookAt(specCam.lx, specCam.ly, specCam.lz);
+          if (Math.abs(world.camera.fov - 70) > 0.1) {
+            world.camera.fov = 70;
+            world.camera.updateProjectionMatrix();
+          }
         } else {
+          specCam.seeded = false;
           const t = now / 1000;
           world.camera.position.set(Math.cos(t * 0.15) * 32, 18, Math.sin(t * 0.15) * 32);
           world.camera.lookAt(0, 3, 0);
         }
       }
     }
+  } else {
+    world.update(dt);
   }
 
   world.updateTracers(dt);
-  world.update(dt);
   world.render();
   requestAnimationFrame(frame);
 }

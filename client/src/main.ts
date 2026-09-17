@@ -27,6 +27,12 @@ let myId: string | null = null;
 let snap: Snapshot | null = null;
 let entered = false;
 let lastShotBolt = 0;
+let lastPos = { x: 0, z: 0 };
+let movingSmooth = 0;
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
 
 const net = new Net({
   onWelcome(id, name) {
@@ -135,16 +141,21 @@ function frame(now: number): void {
 
     if (killcam.active && inKillcam) {
       // Actor poses come from the replay timeline, not the frozen death snapshot.
+      world.viewmodel.setVisible(false);
       killcam.update(world.camera, world);
     } else {
       world.syncPlayers(snap.entities, hideId, { showDead: false });
       if (snap.you.role === "playing" && me && me.alive && snap.phase === "playing") {
         setCameraFromPose(world.camera, me);
-        if (me.boltCooldown > 0.85 && lastShotBolt <= 0) {
-          // bolt just fired visual already via audio
-        }
+        world.viewmodel.setVisible(true);
+        world.viewmodel.setAds(ads);
+        const distMoved = Math.hypot(me.x - lastPos.x, me.z - lastPos.z);
+        lastPos = { x: me.x, z: me.z };
+        movingSmooth = lerp(movingSmooth, distMoved > 0.02 ? 1 : 0, 0.2);
+        world.viewmodel.update(dt, movingSmooth > 0.35 && ads < 0.55, now / 1000);
         lastShotBolt = me.boltCooldown;
       } else {
+        world.viewmodel.setVisible(false);
         // Spectate: follow active player or orbit
         const target =
           snap.entities.find((e) => e.id === snap!.activePlayerId) ??

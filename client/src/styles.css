@@ -250,6 +250,8 @@ body,
   border: 1px solid rgba(232, 223, 208, 0.75);
   border-radius: 50%;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+  transition: opacity 0.1s linear;
+  z-index: 12;
 }
 
 #crosshair::after {
@@ -263,18 +265,72 @@ body,
   background: var(--foam);
 }
 
+#crosshair.hip-plus::before,
+#crosshair.hip-plus::after {
+  content: "";
+  position: absolute;
+  background: rgba(232, 223, 208, 0.9);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+
 #scopeOverlay {
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at center, transparent 12%, rgba(0, 0, 0, 0.82) 28%, #000 55%);
+  background:
+    radial-gradient(circle at center, transparent 11%, rgba(0, 0, 0, 0.55) 18%, rgba(0, 0, 0, 0.92) 32%, #000 58%);
   opacity: 0;
   transition: opacity 0.12s linear;
   pointer-events: none;
+  z-index: 11;
 }
 
 #scopeOverlay.active {
   display: block !important;
   opacity: 1;
+}
+
+#scopeReticle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-family: "IBM Plex Sans", monospace;
+  font-weight: 700;
+  font-size: 28px;
+  line-height: 1;
+  color: rgba(180, 255, 160, 0.95);
+  text-shadow:
+    0 0 1px #000,
+    0 0 6px rgba(0, 0, 0, 0.9),
+    1px 0 0 #000,
+    -1px 0 0 #000,
+    0 1px 0 #000,
+    0 -1px 0 #000;
+  z-index: 13;
+  user-select: none;
+}
+
+#scopeReticle::before,
+#scopeReticle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background: rgba(180, 255, 160, 0.85);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+}
+
+/* Fine hairlines through the + */
+#scopeReticle::before {
+  width: 72px;
+  height: 1px;
+  margin: -0.5px 0 0 -36px;
+}
+
+#scopeReticle::after {
+  width: 1px;
+  height: 72px;
+  margin: -36px 0 0 -0.5px;
 }
 
 #killfeed {

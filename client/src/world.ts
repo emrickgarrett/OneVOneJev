@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { MAP_BOXES, MAP_BOUNDS } from "@onevonejev/shared";
+import { createOperator, createViewmodel } from "./models";
 
 export function createWorld(canvas: HTMLCanvasElement) {
   const renderer = new THREE.WebGLRenderer({
@@ -21,7 +22,6 @@ export function createWorld(canvas: HTMLCanvasElement) {
   const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 200);
   camera.position.set(0, 12, 28);
 
-  // Lighting — harsh desert industrial
   const hemi = new THREE.HemisphereLight(0xddeeff, 0x8a6a40, 0.55);
   scene.add(hemi);
   const sun = new THREE.DirectionalLight(0xffe0b0, 1.35);
@@ -46,19 +46,12 @@ export function createWorld(canvas: HTMLCanvasElement) {
   ground.receiveShadow = true;
   scene.add(ground);
 
-  // Subtle grid grit
   const grid = new THREE.GridHelper(56, 28, 0x7a6240, 0x8a7050);
   grid.position.y = 0.02;
   (grid.material as THREE.Material).opacity = 0.25;
   (grid.material as THREE.Material).transparent = true;
   scene.add(grid);
 
-  const containerMat = new THREE.MeshStandardMaterial({
-    color: 0xb84a2a,
-    roughness: 0.7,
-    metalness: 0.35,
-  });
-  void containerMat;
   const steelMat = new THREE.MeshStandardMaterial({
     color: 0x5c6670,
     roughness: 0.55,
@@ -91,14 +84,12 @@ export function createWorld(canvas: HTMLCanvasElement) {
         metalness: 0.35,
       });
     } else if (h <= 1.5) mat = crateMat;
-    else if (h >= 7) mat = steelMat;
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
     mesh.position.set(cx, cy, cz);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     colliders.add(mesh);
 
-    // Container ribbing
     if (h >= 2.4 && h <= 5.5 && w >= 4) {
       const rib = new THREE.Mesh(
         new THREE.BoxGeometry(w * 0.98, 0.08, d * 0.98),
@@ -109,7 +100,6 @@ export function createWorld(canvas: HTMLCanvasElement) {
     }
   }
 
-  // Decorative tower beacon
   const beacon = new THREE.Mesh(
     new THREE.CylinderGeometry(0.15, 0.15, 2.5, 8),
     new THREE.MeshStandardMaterial({ color: 0xe85d04, emissive: 0xe85d04, emissiveIntensity: 0.6 }),
@@ -118,27 +108,15 @@ export function createWorld(canvas: HTMLCanvasElement) {
   scene.add(beacon);
 
   const players = new Map<string, THREE.Group>();
+  const viewmodel = createViewmodel();
+  camera.add(viewmodel.root);
+  scene.add(camera);
+  viewmodel.setVisible(false);
 
   function getOrCreatePlayer(id: string, kind: "human" | "jev"): THREE.Group {
     let g = players.get(id);
     if (g) return g;
-    g = new THREE.Group();
-    const body = new THREE.Mesh(
-      new THREE.CapsuleGeometry(0.35, 1.0, 4, 8),
-      new THREE.MeshStandardMaterial({
-        color: kind === "jev" ? 0xe85d04 : 0x4caf50,
-        roughness: 0.6,
-      }),
-    );
-    body.position.y = 0.85;
-    body.castShadow = true;
-    g.add(body);
-    const head = new THREE.Mesh(
-      new THREE.SphereGeometry(0.22, 12, 12),
-      new THREE.MeshStandardMaterial({ color: 0xe8dfd0 }),
-    );
-    head.position.y = 1.55;
-    g.add(head);
+    g = createOperator(kind);
     scene.add(g);
     players.set(id, g);
     return g;
@@ -162,8 +140,7 @@ export function createWorld(canvas: HTMLCanvasElement) {
     for (const e of entities) {
       seen.add(e.id);
       const g = getOrCreatePlayer(e.id, e.kind);
-      const visible = e.id !== hideId && (e.alive || showDead);
-      g.visible = visible;
+      g.visible = e.id !== hideId && (e.alive || showDead);
       g.position.set(e.x, e.y, e.z);
       g.rotation.y = -e.yaw + Math.PI / 2;
     }
@@ -234,6 +211,7 @@ export function createWorld(canvas: HTMLCanvasElement) {
     setPlayerPose,
     showTracer,
     updateTracers,
+    viewmodel,
     bounds: MAP_BOUNDS,
     render() {
       renderer.render(scene, camera);

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>1v1 Jev — Quickscope Arena</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Sans:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="game"></canvas>
+
+      <div id="lobby" class="panel-screen">
+        <div class="lobby-bg"></div>
+        <div class="lobby-inner">
+          <p class="brand">1v1 JEV</p>
+          <h1>Quickscope Arena</h1>
+          <p class="tagline">First to 5. Bolt action. No camping. Jev doesn’t miss forever.</p>
+          <label class="name-field">
+            Callsign
+            <input id="nameInput" maxlength="16" placeholder="Your name" autocomplete="off" />
+          </label>
+          <div class="cta-row">
+            <button id="btnQueue" class="btn primary">Join Queue</button>
+            <button id="btnSpectate" class="btn ghost">Spectate</button>
+          </div>
+          <p class="hint">WASD move · Mouse look · Right-click ADS · Left-click fire · Space jump</p>
+        </div>
+      </div>
+
+      <div id="hud" class="hidden">
+        <div id="scoreboard">
+          <span id="scoreHuman">0</span>
+          <span class="vs">VS</span>
+          <span id="scoreJev">0</span>
+        </div>
+        <div id="phaseBanner"></div>
+        <div id="crosshair"></div>
+        <div id="scopeOverlay" class="hidden"></div>
+        <div id="killfeed"></div>
+        <div id="matchInfo">
+          <div id="roleLabel"></div>
+          <div id="queueLabel"></div>
+        </div>
+        <canvas id="radar" width="160" height="160"></canvas>
+
+        <aside id="chat" class="chat">
+          <div id="chatLog"></div>
+          <form id="chatForm">
+            <input id="chatInput" maxlength="140" placeholder="Trash talk…" autocomplete="off" />
+          </form>
+        </aside>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

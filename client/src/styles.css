@@ -1,0 +1,364 @@
+:root {
+  --bg: #1a1612;
+  --sand: #c4a574;
+  --rust: #b84a2a;
+  --steel: #6d7a84;
+  --ink: #0e0c0a;
+  --foam: #e8dfd0;
+  --accent: #e85d04;
+  --good: #7cb342;
+  --danger: #e53935;
+  --font-display: "Bebas Neue", Impact, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--ink);
+  color: var(--foam);
+  font-family: var(--font-body);
+}
+
+#game {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.panel-screen {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+}
+
+.lobby-bg {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 40%, rgba(184, 74, 42, 0.35), transparent 70%),
+    linear-gradient(160deg, #2a2218 0%, #0e0c0a 55%, #1a1010 100%);
+  animation: lobbyPulse 8s ease-in-out infinite alternate;
+}
+
+@keyframes lobbyPulse {
+  from {
+    filter: saturate(1);
+  }
+  to {
+    filter: saturate(1.15) brightness(1.05);
+  }
+}
+
+.lobby-inner {
+  position: relative;
+  text-align: center;
+  max-width: 520px;
+  padding: 2rem;
+}
+
+.brand {
+  font-family: var(--font-display);
+  font-size: clamp(4rem, 12vw, 7rem);
+  letter-spacing: 0.06em;
+  line-height: 0.9;
+  color: var(--accent);
+  text-shadow: 0 4px 0 #5c2208, 0 0 40px rgba(232, 93, 4, 0.35);
+  animation: brandIn 0.8s cubic-bezier(0.2, 0.9, 0.2, 1) both;
+}
+
+.lobby-inner h1 {
+  font-family: var(--font-display);
+  font-size: clamp(1.6rem, 4vw, 2.4rem);
+  letter-spacing: 0.18em;
+  color: var(--sand);
+  margin-top: 0.4rem;
+  animation: brandIn 0.8s 0.1s cubic-bezier(0.2, 0.9, 0.2, 1) both;
+}
+
+.tagline {
+  margin: 1rem 0 1.5rem;
+  color: var(--steel);
+  font-size: 0.95rem;
+  animation: brandIn 0.8s 0.2s cubic-bezier(0.2, 0.9, 0.2, 1) both;
+}
+
+@keyframes brandIn {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.name-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  text-align: left;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--sand);
+  margin-bottom: 1rem;
+}
+
+.name-field input,
+#chatInput {
+  background: rgba(14, 12, 10, 0.85);
+  border: 1px solid rgba(196, 165, 116, 0.35);
+  color: var(--foam);
+  padding: 0.75rem 1rem;
+  font: inherit;
+  font-size: 1rem;
+  outline: none;
+}
+
+.name-field input:focus,
+#chatInput:focus {
+  border-color: var(--accent);
+}
+
+.cta-row {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.btn {
+  font-family: var(--font-display);
+  letter-spacing: 0.12em;
+  font-size: 1.25rem;
+  padding: 0.7rem 1.4rem;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.btn:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.08);
+}
+
+.btn.primary {
+  background: var(--accent);
+  color: var(--ink);
+}
+
+.btn.ghost {
+  background: transparent;
+  color: var(--foam);
+  border: 1px solid rgba(232, 223, 208, 0.35);
+}
+
+.hint {
+  margin-top: 1.5rem;
+  font-size: 0.75rem;
+  color: rgba(232, 223, 208, 0.45);
+}
+
+#hud {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+}
+
+#scoreboard {
+  position: absolute;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  font-family: var(--font-display);
+  font-size: 2.5rem;
+  letter-spacing: 0.08em;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
+}
+
+#scoreHuman {
+  color: var(--good);
+}
+#scoreJev {
+  color: var(--accent);
+}
+.vs {
+  font-size: 1rem;
+  color: var(--steel);
+}
+
+#phaseBanner {
+  position: absolute;
+  top: 35%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-display);
+  font-size: clamp(3rem, 10vw, 6rem);
+  letter-spacing: 0.15em;
+  color: var(--foam);
+  text-shadow: 0 4px 24px rgba(0, 0, 0, 0.8);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+#phaseBanner.show {
+  opacity: 1;
+  animation: countdownPop 0.35s ease;
+}
+
+@keyframes countdownPop {
+  from {
+    transform: translate(-50%, -50%) scale(1.35);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+}
+
+#crosshair {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border: 1px solid rgba(232, 223, 208, 0.75);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+
+#crosshair::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 2px;
+  height: 2px;
+  margin: -1px 0 0 -1px;
+  background: var(--foam);
+}
+
+#scopeOverlay {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, transparent 12%, rgba(0, 0, 0, 0.82) 28%, #000 55%);
+  opacity: 0;
+  transition: opacity 0.12s linear;
+  pointer-events: none;
+}
+
+#scopeOverlay.active {
+  display: block !important;
+  opacity: 1;
+}
+
+#killfeed {
+  position: absolute;
+  top: 5rem;
+  right: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  text-align: right;
+}
+
+#killfeed div {
+  background: rgba(14, 12, 10, 0.55);
+  padding: 0.25rem 0.5rem;
+  border-left: 2px solid var(--rust);
+}
+
+#matchInfo {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  font-size: 0.85rem;
+  text-shadow: 0 1px 4px #000;
+}
+
+#radar {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  width: 160px;
+  height: 160px;
+  border: 2px solid rgba(232, 93, 4, 0.85);
+  background: rgba(14, 12, 10, 0.82);
+  border-radius: 4px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.45);
+  z-index: 12;
+}
+
+.chat {
+  position: absolute;
+  left: 1rem;
+  bottom: 1rem;
+  width: min(280px, 40vw);
+  pointer-events: auto;
+  background: rgba(14, 12, 10, 0.55);
+  border: 1px solid rgba(196, 165, 116, 0.25);
+  padding: 0.5rem;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.chat.playing {
+  opacity: 0.28;
+  transform: scale(0.96);
+}
+
+.chat.playing:focus-within {
+  opacity: 0.9;
+  transform: none;
+}
+
+#chatLog {
+  height: 120px;
+  overflow-y: auto;
+  font-size: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.4rem;
+}
+
+#chatLog .from {
+  color: var(--sand);
+  font-weight: 600;
+}
+
+#chatForm {
+  display: flex;
+}
+
+#chatInput {
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.8rem;
+  pointer-events: auto;
+}

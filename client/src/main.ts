@@ -208,7 +208,7 @@ function frame(now: number): void {
 
     if (killcam.active && inKillcam) {
       world.viewmodel.setVisible(false);
-      killcam.update(world.camera, world);
+      killcam.update(world.camera, world, dt);
       world.update(dt);
       specCam.seeded = false;
     } else {

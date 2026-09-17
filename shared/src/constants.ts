@@ -6,8 +6,13 @@ export const JEV_DECISION_HZ = 9;
 export const MATCH_KILLS_TO_WIN = 5;
 export const COUNTDOWN_SECONDS = 3;
 export const SPAWN_PROTECTION_MS = 1500;
-export const KILLCAM_DURATION_MS = 2500;
-export const KILLCAM_BUFFER_MS = 2800;
+export const KILLCAM_DURATION_MS = 5200;
+export const KILLCAM_BUFFER_MS = 3400;
+/** Recorded-time window before the kill that plays in slow motion. */
+export const KILLCAM_SLOWMO_BEFORE_MS = 1000;
+/** Recorded-time hold after the kill while still in slow motion. */
+export const KILLCAM_SLOWMO_AFTER_MS = 450;
+export const KILLCAM_SLOWMO_RATE = 0.28;
 /** Soft match cap — challenger is kicked (no rematch) if the duel runs this long. */
 export const MATCH_TIME_LIMIT_MS = 3 * 60 * 1000;
 

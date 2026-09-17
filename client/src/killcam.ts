@@ -1,6 +1,13 @@
-import type { KillcamFrame, KillcamReplay } from "@onevonejev/shared";
+import {
+  KILLCAM_DURATION_MS,
+  KILLCAM_SLOWMO_AFTER_MS,
+  KILLCAM_SLOWMO_BEFORE_MS,
+  KILLCAM_SLOWMO_RATE,
+  PLAYER_EYE,
+  type KillcamFrame,
+  type KillcamReplay,
+} from "@onevonejev/shared";
 import type { PerspectiveCamera } from "three";
-import { PLAYER_EYE } from "@onevonejev/shared";
 import type { World } from "./world";
 
 function sampleTrack(frames: KillcamFrame[], targetT: number): KillcamFrame | null {
@@ -18,7 +25,11 @@ export class KillcamPlayer {
   private playing = false;
   private startWall = 0;
   private startT = 0;
+  private endT = 0;
+  private shotT = 0;
+  private replayT = 0;
   private lastShotT = -1;
+  private lastWall = 0;
 
   start(replay: KillcamReplay): void {
     const frames = (replay.frames ?? []).slice().sort((a, b) => a.t - b.t);
@@ -31,12 +42,22 @@ export class KillcamPlayer {
     }
     this.replay = { subjectId: replay.subjectId, frames, actors };
     this.playing = frames.length > 0 || Object.values(actors).some((t) => t.length > 0);
-    this.startWall = performance.now();
-    const allT = [
-      ...frames.map((f) => f.t),
-      ...Object.values(actors).flatMap((t) => t.map((f) => f.t)),
+
+    const allFrames = [
+      ...frames,
+      ...Object.values(actors).flatMap((t) => t),
     ];
+    const allT = allFrames.map((f) => f.t);
     this.startT = allT.length ? Math.min(...allT) : 0;
+    this.endT = allT.length ? Math.max(...allT) : 0;
+
+    const shotFrames = allFrames.filter((f) => f.shot).sort((a, b) => a.t - b.t);
+    // Prefer the last recorded shot (final kill).
+    this.shotT = shotFrames.length ? shotFrames[shotFrames.length - 1]!.t : this.endT;
+
+    this.replayT = this.startT;
+    this.startWall = performance.now();
+    this.lastWall = this.startWall;
     this.lastShotT = -1;
   }
 
@@ -50,13 +71,27 @@ export class KillcamPlayer {
     return this.playing;
   }
 
-  update(camera: PerspectiveCamera, world: World): void {
+  update(camera: PerspectiveCamera, world: World, dt: number): void {
     if (!this.playing || !this.replay) return;
-    const elapsed = performance.now() - this.startWall;
-    const targetT = this.startT + elapsed;
 
-    const camTrack =
-      this.replay.actors[this.replay.subjectId] ?? this.replay.frames;
+    const wallNow = performance.now();
+    const wallElapsed = wallNow - this.startWall;
+    const step = Math.min(0.05, Math.max(0, dt));
+
+    const slowStart = this.shotT - KILLCAM_SLOWMO_BEFORE_MS;
+    const slowEnd = this.shotT + KILLCAM_SLOWMO_AFTER_MS;
+    let rate = 1;
+    if (this.replayT >= slowStart && this.replayT < slowEnd) {
+      rate = KILLCAM_SLOWMO_RATE;
+    } else if (this.replayT >= slowEnd) {
+      // Linger on the aftermath while the server killcam phase finishes.
+      rate = 0;
+    }
+
+    this.replayT = Math.min(this.endT, this.replayT + step * 1000 * rate);
+    const targetT = this.replayT;
+
+    const camTrack = this.replay.actors[this.replay.subjectId] ?? this.replay.frames;
     const camFrame = sampleTrack(camTrack, targetT);
     if (camFrame) {
       setCameraFromPose(camera, camFrame);
@@ -73,14 +108,14 @@ export class KillcamPlayer {
       }
     }
 
-    // Replay every actor's recorded motion (victim runs/strafes; killer body hidden).
     for (const [id, track] of Object.entries(this.replay.actors)) {
       const pose = sampleTrack(track, targetT);
       if (!pose) continue;
       world.setPlayerPose(id, pose, id !== this.replay.subjectId);
     }
 
-    if (elapsed > 2600) this.playing = false;
+    if (wallElapsed > KILLCAM_DURATION_MS + 200) this.playing = false;
+    this.lastWall = wallNow;
   }
 }
 

@@ -75,7 +75,19 @@ const net = new Net({
         s.lastShot.dy,
         s.lastShot.dz,
       );
-      audio.fire();
+      const listener =
+        playing && local.alive
+          ? { x: local.x, y: local.y + 1.55, z: local.z }
+          : (() => {
+              const cam = world.camera.position;
+              return { x: cam.x, y: cam.y, z: cam.z };
+            })();
+      const distance = Math.hypot(
+        s.lastShot.ox - listener.x,
+        s.lastShot.oy - listener.y,
+        s.lastShot.oz - listener.z,
+      );
+      audio.fire({ distance });
     }
   },
   onChat(msg) {

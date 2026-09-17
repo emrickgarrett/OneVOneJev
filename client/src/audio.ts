@@ -97,24 +97,43 @@ export class AudioBus {
     return true;
   }
 
-  fire(): void {
+  /**
+   * @param distance World-space meters from listener to muzzle.
+   *                 Near (own shot) stays loud; distant shots fall off.
+   */
+  fire(opts?: { distance?: number }): void {
     if (this.muted) return;
+    const dist = Math.max(0, opts?.distance ?? 0);
+    // Soft inverse falloff — full near the muzzle, ~25% by mid-map (~25m).
+    const atten = Math.max(0.14, Math.min(1, 10 / (10 + dist * 0.85)));
+    const rateJitter = 0.93 + Math.random() * 0.14;
+    const gainJitter = 0.88 + Math.random() * 0.24;
+    const boltDelay = 0.16 + Math.random() * 0.14;
+    const boltRate = 0.88 + Math.random() * 0.16;
+
     void this.preload().then(() => {
       if (this.muted) return;
-      if (!this.playBuffer("fire", { gain: 0.35 })) this.synthFire();
+      const fireGain = 0.35 * atten * gainJitter;
+      if (!this.playBuffer("fire", { gain: fireGain, playbackRate: rateJitter })) {
+        this.synthFire(fireGain, rateJitter);
+      }
       const ctx = this.ensure();
-      const when = ctx.currentTime + 0.22;
-      if (!this.playBuffer("bolt", { gain: 0.22, when, playbackRate: 0.92 })) {
-        this.synthBolt(when);
+      const when = ctx.currentTime + boltDelay;
+      const boltGain = 0.22 * atten * (0.9 + Math.random() * 0.2);
+      if (!this.playBuffer("bolt", { gain: boltGain, when, playbackRate: boltRate })) {
+        this.synthBolt(when, boltGain);
       }
     });
   }
 
   reload(): void {
     if (this.muted) return;
+    const rate = 0.9 + Math.random() * 0.16;
     void this.preload().then(() => {
       if (this.muted) return;
-      if (!this.playBuffer("bolt", { gain: 0.25, playbackRate: 0.95 })) this.synthBolt();
+      if (!this.playBuffer("bolt", { gain: 0.25 * (0.9 + Math.random() * 0.2), playbackRate: rate })) {
+        this.synthBolt(0, 0.25);
+      }
     });
   }
 
@@ -124,7 +143,7 @@ export class AudioBus {
     const o = ctx.createOscillator();
     const g = ctx.createGain();
     o.type = "sawtooth";
-    o.frequency.value = 220;
+    o.frequency.value = 200 + Math.random() * 50;
     g.gain.value = 0.0001;
     g.gain.exponentialRampToValueAtTime(0.08, ctx.currentTime + 0.01);
     g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.25);
@@ -142,7 +161,7 @@ export class AudioBus {
       const o = ctx.createOscillator();
       const g = ctx.createGain();
       o.type = "triangle";
-      o.frequency.value = f;
+      o.frequency.value = f * (0.98 + Math.random() * 0.04);
       const t0 = ctx.currentTime + i * 0.12;
       g.gain.value = 0.0001;
       g.gain.exponentialRampToValueAtTime(0.06, t0 + 0.02);
@@ -154,14 +173,14 @@ export class AudioBus {
     });
   }
 
-  private synthFire(): void {
+  private synthFire(gain = 0.1, rate = 1): void {
     const ctx = this.ensure();
     const o = ctx.createOscillator();
     const g = ctx.createGain();
     o.type = "square";
-    o.frequency.value = 90;
+    o.frequency.value = 90 * rate;
     g.gain.value = 0.0001;
-    g.gain.exponentialRampToValueAtTime(0.1, ctx.currentTime + 0.01);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.02, gain), ctx.currentTime + 0.01);
     g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.18);
     o.connect(g);
     g.connect(this.out());
@@ -169,7 +188,7 @@ export class AudioBus {
     o.stop(ctx.currentTime + 0.2);
   }
 
-  private synthBolt(when = 0): void {
+  private synthBolt(when = 0, gain = 0.06): void {
     const ctx = this.ensure();
     const t0 = when || ctx.currentTime;
     const o = ctx.createOscillator();
@@ -178,7 +197,7 @@ export class AudioBus {
     o.frequency.setValueAtTime(420, t0);
     o.frequency.exponentialRampToValueAtTime(180, t0 + 0.12);
     g.gain.value = 0.0001;
-    g.gain.exponentialRampToValueAtTime(0.06, t0 + 0.01);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.015, gain), t0 + 0.01);
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.16);
     o.connect(g);
     g.connect(this.out());

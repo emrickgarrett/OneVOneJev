@@ -78,14 +78,18 @@ export class Hud {
 
     this.chat.classList.toggle("playing", snap.you.role === "playing");
 
-    const scoped = adsProgress > 0.45 && snap.you.role === "playing" && snap.phase === "playing";
+    const liveScoped =
+      snap.you.role === "playing" && snap.phase === "playing" && adsProgress > 0.45;
+    const killcamScoped = snap.phase === "killcam" && adsProgress > 0.45;
+    const scoped = liveScoped || killcamScoped;
     if (scoped) {
       this.scope.classList.add("active");
       this.scope.classList.remove("hidden");
       this.crosshair.style.opacity = "0";
     } else {
       this.scope.classList.remove("active");
-      this.crosshair.style.opacity = snap.you.role === "playing" ? "1" : "0";
+      this.crosshair.style.opacity =
+        snap.you.role === "playing" || snap.phase === "killcam" ? "1" : "0";
     }
   }
 

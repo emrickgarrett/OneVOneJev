@@ -30,6 +30,7 @@ export class KillcamPlayer {
   private replayT = 0;
   private lastShotT = -1;
   private lastWall = 0;
+  private subjectAds = 0;
 
   start(replay: KillcamReplay): void {
     const frames = (replay.frames ?? []).slice().sort((a, b) => a.t - b.t);
@@ -59,16 +60,25 @@ export class KillcamPlayer {
     this.startWall = performance.now();
     this.lastWall = this.startWall;
     this.lastShotT = -1;
+
+    const camTrack = actors[replay.subjectId] ?? frames;
+    this.subjectAds = sampleTrack(camTrack, this.startT)?.adsProgress ?? 0;
   }
 
   stop(): void {
     this.playing = false;
     this.replay = null;
     this.lastShotT = -1;
+    this.subjectAds = 0;
   }
 
   get active(): boolean {
     return this.playing;
+  }
+
+  /** Subject's ADS amount for the current replay sample (drives scope HUD). */
+  get adsProgress(): number {
+    return this.subjectAds;
   }
 
   update(camera: PerspectiveCamera, world: World, dt: number): void {
@@ -94,6 +104,7 @@ export class KillcamPlayer {
     const camTrack = this.replay.actors[this.replay.subjectId] ?? this.replay.frames;
     const camFrame = sampleTrack(camTrack, targetT);
     if (camFrame) {
+      this.subjectAds = camFrame.adsProgress;
       setCameraFromPose(camera, camFrame);
       if (camFrame.shot && camFrame.t !== this.lastShotT) {
         this.lastShotT = camFrame.t;

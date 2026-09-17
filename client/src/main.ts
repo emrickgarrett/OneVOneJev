@@ -194,11 +194,6 @@ function frame(now: number): void {
   }
 
   if (snap) {
-    const me = snap.entities.find((e) => e.id === myId);
-    const ads = playing && local.alive ? local.adsProgress : (me?.adsProgress ?? 0);
-    hud.apply(snap, playing ? ads : 0);
-    drawRadar(radarCanvas, snap.entities, myId);
-
     const inKillcam = snap.phase === "killcam";
     const hideId = inKillcam
       ? snap.killcamSubjectId ?? null
@@ -274,6 +269,15 @@ function frame(now: number): void {
         }
       }
     }
+
+    const ads =
+      playing && local.alive
+        ? local.adsProgress
+        : killcam.active && inKillcam
+          ? killcam.adsProgress
+          : 0;
+    hud.apply(snap, ads);
+    drawRadar(radarCanvas, snap.entities, myId);
   } else {
     world.update(dt);
   }

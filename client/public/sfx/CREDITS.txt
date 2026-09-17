@@ -1,0 +1,11 @@
+# Sound effects
+
+## sniper_fire.wav
+Source: "Futuristic Sniper Rifle" by Michael Klier
+https://opengameart.org/content/futuristic-sniper-rifle
+License: CC-BY-SA 3.0
+
+## sniper_bolt.wav
+Source: "shotguncock.wav" from Gun reload sounds by SpringySpringo
+https://opengameart.org/content/gun-reload-sounds
+License: CC0 1.0 (public domain)

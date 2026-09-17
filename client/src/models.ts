@@ -191,14 +191,23 @@ function attachRifleToHand(character: THREE.Object3D): void {
     character.getObjectByName("HandR") ??
     character.getObjectByName("mixamorigRightHand");
   const rifle = createSniperRifle();
-  rifle.scale.setScalar(0.42);
-  rifle.position.set(0.02, 0.04, 0.12);
-  rifle.rotation.set(-Math.PI / 2, 0.15, Math.PI / 2);
+
   if (hand) {
+    // Quaternius armature is exported at scale 100 — parenting without
+    // compensating makes the gun gigantic and clip through the floor.
+    character.updateMatrixWorld(true);
+    const worldScale = new THREE.Vector3();
+    hand.getWorldScale(worldScale);
+    const inv = 1 / Math.max(Math.abs(worldScale.x), 1e-4);
+    // Template is ~1.05 units long; aim for ~0.9m in world space.
+    rifle.scale.setScalar(0.9 * inv);
+    rifle.position.set(0.06 * inv, 0.02 * inv, 0.04 * inv);
+    rifle.rotation.set(0, Math.PI / 2, -Math.PI / 2);
     hand.add(rifle);
   } else {
-    rifle.position.set(0.25, 1.05, 0.3);
-    rifle.scale.setScalar(0.95);
+    rifle.scale.setScalar(0.9);
+    rifle.position.set(0.28, 1.1, 0.32);
+    rifle.rotation.y = Math.PI / 2;
     character.add(rifle);
   }
 }

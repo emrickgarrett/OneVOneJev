@@ -13,14 +13,21 @@ export interface Vec3 {
   z: number;
 }
 
+/**
+ * Client-authoritative pose for the human player.
+ * Server accepts this as-is for match/hitscan (no movement simulation).
+ */
 export interface PlayerInput {
   seq: number;
-  forward: number;
-  strafe: number;
-  yawDelta: number;
-  pitchDelta: number;
-  jump: boolean;
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
+  pitch: number;
+  onGround: boolean;
   ads: boolean;
+  /** Ads blend 0–1 from the client (server mirrors for hitscan accuracy). */
+  adsProgress: number;
   fire: boolean;
 }
 

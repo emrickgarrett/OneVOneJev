@@ -25,6 +25,7 @@ import {
   createFighter,
   respawn,
   tickFighter,
+  tickHumanTimers,
   tryFire,
   type Fighter,
   type ShotEvent,
@@ -261,7 +262,8 @@ export class MatchRoom {
     applyBotControls(this.jev, this.jevCtrl.getAction(this.jev, this.human, now));
 
     const fighters = [this.jev, ...(this.human ? [this.human] : [])];
-    for (const f of fighters) tickFighter(f);
+    tickFighter(this.jev);
+    if (this.human) tickHumanTimers(this.human);
 
     // Fire
     const shots: ShotEvent[] = [];

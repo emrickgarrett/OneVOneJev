@@ -1,13 +1,7 @@
-import type { PlayerInput } from "@onevonejev/shared";
-
 export class Input {
   ads = false;
-  fire = false;
-  /** Deltas queued for the next network sample (already applied locally via onLook). */
-  private netYawDelta = 0;
-  private netPitchDelta = 0;
+  private fireQueued = false;
   private keys = new Set<string>();
-  private seq = 0;
   enabled = false;
   sensitivity = 0.0028;
   /** Called immediately on mouse move so the camera never waits on the server. */
@@ -26,16 +20,12 @@ export class Input {
 
     document.addEventListener("mousemove", (e) => {
       if (document.pointerLockElement !== canvas || !this.enabled) return;
-      const yawDelta = e.movementX * this.sensitivity;
-      const pitchDelta = -e.movementY * this.sensitivity;
-      this.netYawDelta += yawDelta;
-      this.netPitchDelta += pitchDelta;
-      this.onLook?.(yawDelta, pitchDelta);
+      this.onLook?.(e.movementX * this.sensitivity, -e.movementY * this.sensitivity);
     });
 
     document.addEventListener("mousedown", (e) => {
       if (!this.enabled) return;
-      if (e.button === 0) this.fire = true;
+      if (e.button === 0) this.fireQueued = true;
       if (e.button === 2) this.ads = true;
     });
     document.addEventListener("mouseup", (e) => {
@@ -44,26 +34,25 @@ export class Input {
     canvas.addEventListener("contextmenu", (e) => e.preventDefault());
   }
 
-  sample(): PlayerInput {
-    const f =
+  moveState(): { forward: number; strafe: number; jump: boolean; ads: boolean } {
+    const forward =
       (this.keys.has("KeyW") || this.keys.has("ArrowUp") ? 1 : 0) -
       (this.keys.has("KeyS") || this.keys.has("ArrowDown") ? 1 : 0);
-    const s =
+    const strafe =
       (this.keys.has("KeyD") || this.keys.has("ArrowRight") ? 1 : 0) -
       (this.keys.has("KeyA") || this.keys.has("ArrowLeft") ? 1 : 0);
-    const input: PlayerInput = {
-      seq: ++this.seq,
-      forward: f,
-      strafe: s,
-      yawDelta: this.netYawDelta,
-      pitchDelta: this.netPitchDelta,
+    return {
+      forward,
+      strafe,
       jump: this.keys.has("Space"),
       ads: this.ads,
-      fire: this.fire,
     };
-    this.netYawDelta = 0;
-    this.netPitchDelta = 0;
-    this.fire = false;
-    return input;
+  }
+
+  /** Latch fire for the next network pose packet. */
+  consumeFire(): boolean {
+    const f = this.fireQueued;
+    this.fireQueued = false;
+    return f;
   }
 }

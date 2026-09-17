@@ -6,7 +6,7 @@ import { Hud } from "./hud";
 import { drawRadar } from "./radar";
 import { KillcamPlayer, setCameraFromPose } from "./killcam";
 import { AudioBus } from "./audio";
-import { PredictedPlayer } from "./predict";
+import { LocalPlayer } from "./predict";
 
 const canvas = document.getElementById("game") as HTMLCanvasElement;
 const lobby = document.getElementById("lobby")!;
@@ -23,10 +23,10 @@ const input = new Input(canvas);
 const hud = new Hud();
 const killcam = new KillcamPlayer();
 const audio = new AudioBus();
-const predicted = new PredictedPlayer();
+const local = new LocalPlayer();
 
 input.onLook = (yawDelta, pitchDelta) => {
-  predicted.applyLook(yawDelta, pitchDelta);
+  local.applyLook(yawDelta, pitchDelta);
 };
 
 let myId: string | null = null;
@@ -57,9 +57,9 @@ const net = new Net({
     const playing = s.you.role === "playing" && s.phase === "playing";
     const me = s.entities.find((e) => e.id === myId);
     if (playing && me) {
-      predicted.reconcile(me);
+      local.syncMatchState(me);
     } else if (wasPlaying) {
-      predicted.reset();
+      local.reset();
     }
     wasPlaying = playing;
 
@@ -121,16 +121,17 @@ window.addEventListener("keydown", (e) => {
 
 net.connect();
 
-// Input send + local movement prediction
+// Client owns pose; server only needs it for hitscan / spectators / Jev.
 setInterval(() => {
-  if (!snap || snap.you.role !== "playing" || snap.phase !== "playing") {
-    input.enabled = false;
-    return;
-  }
-  input.enabled = true;
-  const sample = input.sample();
-  predicted.applyInput(sample);
-  net.send({ type: "input", input: sample });
+  if (!snap || snap.you.role !== "playing" || snap.phase !== "playing" || !local.alive) return;
+  const move = input.moveState();
+  net.send({
+    type: "input",
+    input: local.toInput({
+      ...move,
+      fire: input.consumeFire(),
+    }),
+  });
 }, 1000 / INPUT_HZ);
 
 let last = performance.now();
@@ -138,10 +139,17 @@ function frame(now: number): void {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
 
+  const playing = Boolean(snap && snap.you.role === "playing" && snap.phase === "playing");
+  input.enabled = playing;
+
+  if (playing && local.alive) {
+    const move = input.moveState();
+    local.step(dt, { ...move, fire: false });
+  }
+
   if (snap) {
     const me = snap.entities.find((e) => e.id === myId);
-    const playing = snap.you.role === "playing" && snap.phase === "playing";
-    const ads = playing && predicted.alive ? predicted.adsProgress : (me?.adsProgress ?? 0);
+    const ads = playing && local.alive ? local.adsProgress : (me?.adsProgress ?? 0);
     hud.apply(snap, playing ? ads : 0);
     drawRadar(radarCanvas, snap.entities, myId);
 
@@ -157,14 +165,14 @@ function frame(now: number): void {
       killcam.update(world.camera, world);
     } else {
       world.syncPlayers(snap.entities, hideId, { showDead: false });
-      if (playing && predicted.alive) {
-        setCameraFromPose(world.camera, predicted);
+      if (playing && local.alive) {
+        setCameraFromPose(world.camera, local);
         world.viewmodel.setVisible(true);
-        world.viewmodel.setAds(predicted.adsProgress);
-        const distMoved = Math.hypot(predicted.x - lastPos.x, predicted.z - lastPos.z);
-        lastPos = { x: predicted.x, z: predicted.z };
-        movingSmooth = lerp(movingSmooth, distMoved > 0.02 ? 1 : 0, 0.25);
-        world.viewmodel.update(dt, movingSmooth > 0.35 && predicted.adsProgress < 0.55, now / 1000);
+        world.viewmodel.setAds(local.adsProgress);
+        const distMoved = Math.hypot(local.x - lastPos.x, local.z - lastPos.z);
+        lastPos = { x: local.x, z: local.z };
+        movingSmooth = lerp(movingSmooth, distMoved > 0.015 ? 1 : 0, 0.3);
+        world.viewmodel.update(dt, movingSmooth > 0.35 && local.adsProgress < 0.55, now / 1000);
       } else {
         world.viewmodel.setVisible(false);
         const target =

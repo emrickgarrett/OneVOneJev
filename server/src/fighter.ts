@@ -7,7 +7,6 @@ import {
   GRAVITY,
   HIPFIRE_SPREAD_DEG,
   JUMP_VELOCITY,
-  MAX_LOOK_DELTA,
   MAX_LOOK_RATE,
   MOVE_SPEED,
   PLAYER_EYE,
@@ -99,14 +98,22 @@ export function createFighter(
 }
 
 export function applyInput(f: Fighter, input: PlayerInput): void {
-  f.moveForward = clamp(input.forward, -1, 1);
-  f.moveStrafe = clamp(input.strafe, -1, 1);
-  // Client sends per-sample look deltas (already integrated over the input interval).
-  f.yawDelta = clamp(input.yawDelta, -MAX_LOOK_DELTA, MAX_LOOK_DELTA);
-  f.pitchDelta = clamp(input.pitchDelta, -MAX_LOOK_DELTA, MAX_LOOK_DELTA);
-  f.wantJump = input.jump;
+  // Human locomotion is client-authoritative — trust reported pose.
+  f.x = input.x;
+  f.y = input.y;
+  f.z = input.z;
+  f.yaw = input.yaw;
+  f.pitch = clamp(input.pitch, -1.4, 1.4);
+  f.onGround = input.onGround;
+  f.adsProgress = clamp(input.adsProgress, 0, 1);
   f.wantAds = input.ads;
   f.wantFire = input.fire;
+  f.yawDelta = 0;
+  f.pitchDelta = 0;
+  f.moveForward = 0;
+  f.moveStrafe = 0;
+  f.wantJump = false;
+  f.vy = 0;
 }
 
 export function applyBotControls(
@@ -129,6 +136,13 @@ export function applyBotControls(
   f.wantJump = ctrl.jump;
   f.wantAds = ctrl.ads;
   f.wantFire = ctrl.fire;
+}
+
+/** Bolt + spawn timers only — used for client-authored humans. */
+export function tickHumanTimers(f: Fighter): void {
+  if (!f.alive) return;
+  if (f.boltCooldown > 0) f.boltCooldown = Math.max(0, f.boltCooldown - DT);
+  if (f.spawnProtection > 0) f.spawnProtection = Math.max(0, f.spawnProtection - DT);
 }
 
 export function tickFighter(f: Fighter): void {

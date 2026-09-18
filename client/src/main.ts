@@ -35,6 +35,8 @@ let entered = false;
 let lastPos = { x: 0, z: 0 };
 let movingSmooth = 0;
 let wasPlaying = false;
+/** Skip duplicate muzzle/SFX when the server echoes a shot we already predicted. */
+let suppressOwnShotEchoUntil = 0;
 /** Smoothed spectator chase camera (follows interpolated subject). */
 const specCam = {
   x: 0,
@@ -77,27 +79,38 @@ const net = new Net({
       audio.hit();
     }
     if (s.lastShot && (!prev?.lastShot || prev.lastShot.t !== s.lastShot.t)) {
-      world.showTracer(
-        s.lastShot.ox,
-        s.lastShot.oy,
-        s.lastShot.oz,
-        s.lastShot.dx,
-        s.lastShot.dy,
-        s.lastShot.dz,
-      );
-      const listener =
-        playing && local.alive
-          ? { x: local.x, y: local.y + 1.55, z: local.z }
-          : (() => {
-              const cam = world.camera.position;
-              return { x: cam.x, y: cam.y, z: cam.z };
-            })();
-      const distance = Math.hypot(
-        s.lastShot.ox - listener.x,
-        s.lastShot.oy - listener.y,
-        s.lastShot.oz - listener.z,
-      );
-      audio.fire({ distance });
+      const ownEcho =
+        playing &&
+        local.alive &&
+        performance.now() < suppressOwnShotEchoUntil &&
+        Math.hypot(
+          s.lastShot.ox - local.x,
+          s.lastShot.oy - (local.y + PLAYER_EYE),
+          s.lastShot.oz - local.z,
+        ) < 2.5;
+      if (!ownEcho) {
+        world.showTracer(
+          s.lastShot.ox,
+          s.lastShot.oy,
+          s.lastShot.oz,
+          s.lastShot.dx,
+          s.lastShot.dy,
+          s.lastShot.dz,
+        );
+        const listener =
+          playing && local.alive
+            ? { x: local.x, y: local.y + PLAYER_EYE, z: local.z }
+            : (() => {
+                const cam = world.camera.position;
+                return { x: cam.x, y: cam.y, z: cam.z };
+              })();
+        const distance = Math.hypot(
+          s.lastShot.ox - listener.x,
+          s.lastShot.oy - listener.y,
+          s.lastShot.oz - listener.z,
+        );
+        audio.fire({ distance });
+      }
     }
   },
   onChat(msg) {
@@ -171,11 +184,22 @@ net.connect();
 setInterval(() => {
   if (!snap || snap.you.role !== "playing" || snap.phase !== "playing" || !local.alive) return;
   const move = input.moveState();
+  const wantsFire = input.consumeFire();
+  // Immediate muzzle/SFX; hit/kill stay server-validated.
+  const fire = wantsFire && local.boltCooldown <= 0;
+  if (fire) {
+    const ray = local.predictFire();
+    if (ray) {
+      world.showTracer(ray.ox, ray.oy, ray.oz, ray.dx, ray.dy, ray.dz);
+      audio.fire({ distance: 0 });
+      suppressOwnShotEchoUntil = performance.now() + 350;
+    }
+  }
   net.send({
     type: "input",
     input: local.toInput({
       ...move,
-      fire: input.consumeFire(),
+      fire,
     }),
   });
 }, 1000 / INPUT_HZ);

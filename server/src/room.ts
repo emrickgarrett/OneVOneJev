@@ -38,6 +38,8 @@ interface Client {
   ws: WebSocket;
   role: Role;
   lastInput: PlayerInput | null;
+  /** Sticky fire latch — pose packets overwrite, but fire must not be dropped. */
+  pendingFire: boolean;
 }
 
 function uid(): string {
@@ -90,6 +92,7 @@ export class MatchRoom {
       ws,
       role: "spectating",
       lastInput: null,
+      pendingFire: false,
     };
     this.clients.set(id, client);
     this.send(ws, { type: "welcome", id, name: client.name });
@@ -163,6 +166,7 @@ export class MatchRoom {
         break;
       case "input":
         if (c.id === this.activePlayerId && this.phase === "playing") {
+          if (msg.input.fire) c.pendingFire = true;
           c.lastInput = msg.input;
         }
         break;
@@ -266,6 +270,11 @@ export class MatchRoom {
       if (c?.lastInput) {
         applyInput(this.human, c.lastInput);
         c.lastInput = null;
+      }
+      // Fire is a one-packet latch; OR it so a later pose packet can't drop the click.
+      if (c?.pendingFire) {
+        this.human.wantFire = true;
+        c.pendingFire = false;
       }
     }
 
@@ -424,6 +433,8 @@ export class MatchRoom {
     if (finishedId) {
       const c = this.clients.get(finishedId);
       if (c) {
+        c.lastInput = null;
+        c.pendingFire = false;
         if (completed) {
           const othersQueued = this.queue.length > 0;
           const othersConnected = [...this.clients.values()].some((x) => x.id !== finishedId);
@@ -569,7 +580,8 @@ export class MatchRoom {
       killcam: this.phase === "killcam" ? this.killcam : undefined,
       killcamSubjectId: this.phase === "killcam" ? this.killcamSubjectId : null,
       lastShot:
-        this.lastShot && Date.now() - this.lastShotAt < 120
+        // Long enough to survive a missed 30Hz snap under RTT (was 120ms — too tight).
+        this.lastShot && Date.now() - this.lastShotAt < 400
           ? {
               ox: this.lastShot.ox,
               oy: this.lastShot.oy,

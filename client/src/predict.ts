@@ -1,9 +1,11 @@
 import {
   ADS_MOVE_MULT,
   ADS_TIME_MS,
+  BOLT_CYCLE_MS,
   GRAVITY,
   JUMP_VELOCITY,
   MOVE_SPEED,
+  PLAYER_EYE,
   resolveCapsule,
   type EntityState,
   type PlayerInput,
@@ -99,11 +101,26 @@ export class LocalPlayer {
 
     this.alive = server.alive;
     this.wasAlive = server.alive;
-    // Bolt is server-authoritative (fire validation).
-    this.boltCooldown = server.boltCooldown;
+    // Keep optimistic local bolt; never snap back to 0 before the server sees the shot.
+    this.boltCooldown = Math.max(this.boltCooldown, server.boltCooldown);
     if (!server.alive) {
       this.adsProgress = 0;
     }
+  }
+
+  /** Optimistic bolt + aim ray for immediate muzzle feedback (hit still server-side). */
+  predictFire(): { ox: number; oy: number; oz: number; dx: number; dy: number; dz: number } | null {
+    if (!this.alive || this.boltCooldown > 0) return null;
+    this.boltCooldown = BOLT_CYCLE_MS / 1000;
+    const cp = Math.cos(this.pitch);
+    return {
+      ox: this.x,
+      oy: this.y + PLAYER_EYE,
+      oz: this.z,
+      dx: Math.cos(this.yaw) * cp,
+      dy: Math.sin(this.pitch),
+      dz: Math.sin(this.yaw) * cp,
+    };
   }
 
   hardSync(server: EntityState): void {
